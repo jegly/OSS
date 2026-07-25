@@ -1,0 +1,273 @@
+#  Auditd — BUILD_PLAN §4.14
+#
+#  Each watch group is one flag that emits several rules, so "select all" on the
+#  group header is what actually gets used here. auditd is optional: without the
+#  package the section shows an install hint instead of the grid.
+
+[section]
+id           = "auditd"
+title        = "auditd"
+nav          = "Monitoring"
+order        = 84
+syntax       = "auditd"
+target       = "/etc/audit/rules.d/99-hardening-gui.rules"
+reload       = [["/usr/sbin/augenrules", "--load"]]
+requires_pkg = "auditd"
+desc         = "Kernel audit rules. Rule syntax is checked with auditctl before install."
+
+# --------------------------------------------------------------------------- #
+#  buffers & failure mode
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "audit_buffer"
+group   = "auditd / buffers"
+key     = "-b 8192"
+value   = "1"
+default = "0"
+title   = "8192-event buffer"
+desc    = "Bigger kernel audit backlog"
+why     = "The default backlog overflows during a busy period and drops events"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_backlog_wait_time"
+group   = "auditd / buffers"
+key     = "--backlog_wait_time 60000"
+value   = "1"
+default = "0"
+title   = "Wait rather than drop"
+desc    = "Blocks briefly when the buffer is full"
+why     = "Losing audit events is worse than a momentary stall"
+risk    = "caution"
+breaks  = "Brief system stalls under heavy audit load"
+
+[[flag]]
+id      = "audit_failure_mode"
+group   = "auditd / buffers"
+key     = "-f 1"
+value   = "1"
+default = "0"
+title   = "Log audit failures"
+desc    = "printk on audit system failure"
+why     = "You need to know when auditing itself stopped working"
+help    = "-f 2 panics the machine instead. That is the correct choice for a high-assurance server and the wrong one for a desktop, so it is not offered here."
+risk    = "safe"
+
+[[flag]]
+id      = "audit_immutable"
+group   = "auditd / buffers"
+key     = "-e 2"
+value   = "1"
+default = "0"
+apply_last = true
+title   = "Lock the rules"
+desc    = "No rule changes until reboot"
+why     = "An attacker's first move is to delete the rule that would catch them"
+help    = "Emitted last in the file, because every rule after it would be rejected. Changing any audit rule afterwards needs a reboot."
+risk    = "one-way"
+breaks  = "All audit rule changes until you reboot"
+
+# --------------------------------------------------------------------------- #
+#  watch groups
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "audit_time_changes"
+group   = "auditd / watches"
+key     = "-a always,exit -F arch=b64 -S adjtimex,settimeofday,clock_settime -k time-change"
+value   = "1"
+default = "0"
+extra   = [
+  "-a always,exit -F arch=b32 -S adjtimex,settimeofday,clock_settime -k time-change",
+  "-w /etc/localtime -p wa -k time-change",
+]
+title   = "Time changes"
+desc    = "Clock tampering"
+why     = "Moving the clock is how you make log timestamps lie"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_identity"
+group   = "auditd / watches"
+key     = "-w /etc/passwd -p wa -k identity"
+value   = "1"
+default = "0"
+extra   = [
+  "-w /etc/group -p wa -k identity",
+  "-w /etc/gshadow -p wa -k identity",
+  "-w /etc/shadow -p wa -k identity",
+  "-w /etc/security/opasswd -p wa -k identity",
+]
+title   = "User and group changes"
+desc    = "Writes to passwd, shadow, group"
+why     = "Adding an account is the simplest persistence there is"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_network_env"
+group   = "auditd / watches"
+key     = "-a always,exit -F arch=b64 -S sethostname,setdomainname -k system-locale"
+value   = "1"
+default = "0"
+extra   = [
+  "-a always,exit -F arch=b32 -S sethostname,setdomainname -k system-locale",
+  "-w /etc/hosts -p wa -k system-locale",
+  "-w /etc/hostname -p wa -k system-locale",
+  "-w /etc/NetworkManager/ -p wa -k system-locale",
+]
+title   = "Network environment"
+desc    = "Hostname and hosts-file changes"
+why     = "A rewritten /etc/hosts redirects updates and telemetry silently"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_mac_policy"
+group   = "auditd / watches"
+key     = "-w /etc/apparmor/ -p wa -k MAC-policy"
+value   = "1"
+default = "0"
+extra   = ["-w /etc/apparmor.d/ -p wa -k MAC-policy"]
+title   = "MAC policy changes"
+desc    = "AppArmor profile edits"
+why     = "Weakening a profile is quieter than disabling AppArmor outright"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_logins"
+group   = "auditd / watches"
+key     = "-w /var/log/lastlog -p wa -k logins"
+value   = "1"
+default = "0"
+extra   = [
+  "-w /var/run/faillock -p wa -k logins",
+  "-w /var/log/wtmp -p wa -k session",
+  "-w /var/log/btmp -p wa -k session",
+  "-w /var/run/utmp -p wa -k session",
+]
+title   = "Logins and sessions"
+desc    = "Login records and session starts"
+why     = "Editing wtmp to erase a login is a textbook cleanup step"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_perm_mod"
+group   = "auditd / watches"
+key     = "-a always,exit -F arch=b64 -S chmod,fchmod,fchmodat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr -F auid>=1000 -F auid!=4294967295 -k perm_mod"
+value   = "1"
+default = "0"
+extra   = [
+  "-a always,exit -F arch=b32 -S chmod,fchmod,fchmodat,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr -F auid>=1000 -F auid!=4294967295 -k perm_mod",
+  "-a always,exit -F arch=b64 -S chown,fchown,fchownat,lchown -F auid>=1000 -F auid!=4294967295 -k perm_mod",
+  "-a always,exit -F arch=b32 -S chown,fchown,fchownat,lchown -F auid>=1000 -F auid!=4294967295 -k perm_mod",
+]
+title   = "Permission changes"
+desc    = "chmod, chown and xattr calls"
+why     = "Loosening a permission is how a foothold becomes persistence"
+risk    = "caution"
+breaks  = "High log volume on a busy desktop"
+
+[[flag]]
+id      = "audit_access_denied"
+group   = "auditd / watches"
+key     = "-a always,exit -F arch=b64 -S open,openat,truncate,ftruncate,creat -F exit=-EACCES -F auid>=1000 -F auid!=4294967295 -k access"
+value   = "1"
+default = "0"
+extra   = [
+  "-a always,exit -F arch=b64 -S open,openat,truncate,ftruncate,creat -F exit=-EPERM -F auid>=1000 -F auid!=4294967295 -k access",
+  "-a always,exit -F arch=b32 -S open,openat,truncate,ftruncate,creat -F exit=-EACCES -F auid>=1000 -F auid!=4294967295 -k access",
+  "-a always,exit -F arch=b32 -S open,openat,truncate,ftruncate,creat -F exit=-EPERM -F auid>=1000 -F auid!=4294967295 -k access",
+]
+title   = "Failed file access"
+desc    = "Permission-denied opens"
+why     = "A burst of denials is someone enumerating what they can reach"
+risk    = "caution"
+breaks  = "Very high log volume"
+
+[[flag]]
+id      = "audit_privileged_exec"
+group   = "auditd / watches"
+key     = "-a always,exit -F arch=b64 -F euid=0 -S execve -k rootcmd"
+value   = "1"
+default = "0"
+extra   = ["-a always,exit -F arch=b32 -F euid=0 -S execve -k rootcmd"]
+title   = "Commands run as root"
+desc    = "Every execve with euid 0"
+why     = "The single most useful audit rule for reconstructing an intrusion"
+risk    = "caution"
+breaks  = "High log volume"
+
+[[flag]]
+id      = "audit_mounts"
+group   = "auditd / watches"
+key     = "-a always,exit -F arch=b64 -S mount -F auid>=1000 -F auid!=4294967295 -k mounts"
+value   = "1"
+default = "0"
+extra   = ["-a always,exit -F arch=b32 -S mount -F auid>=1000 -F auid!=4294967295 -k mounts"]
+title   = "Filesystem mounts"
+desc    = "Successful mount calls by users"
+why     = "Mounting removable media is how data leaves and malware arrives"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_deletions"
+group   = "auditd / watches"
+key     = "-a always,exit -F arch=b64 -S unlink,unlinkat,rename,renameat -F auid>=1000 -F auid!=4294967295 -k delete"
+value   = "1"
+default = "0"
+extra   = ["-a always,exit -F arch=b32 -S unlink,unlinkat,rename,renameat -F auid>=1000 -F auid!=4294967295 -k delete"]
+title   = "File deletions"
+desc    = "unlink and rename by users"
+why     = "Anti-forensics starts with deleting things"
+risk    = "caution"
+breaks  = "Very high log volume — every temp file counts"
+
+[[flag]]
+id      = "audit_sudoers"
+group   = "auditd / watches"
+key     = "-w /etc/sudoers -p wa -k scope"
+value   = "1"
+default = "0"
+extra   = ["-w /etc/sudoers.d/ -p wa -k scope"]
+title   = "sudoers changes"
+desc    = "Edits to sudo policy"
+why     = "A NOPASSWD line added to sudoers.d is silent, permanent root"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_modules"
+group   = "auditd / watches"
+key     = "-a always,exit -F arch=b64 -S init_module,finit_module,delete_module -k modules"
+value   = "1"
+default = "0"
+extra   = [
+  "-a always,exit -F arch=b32 -S init_module,finit_module,delete_module -k modules",
+  "-w /usr/sbin/insmod -p x -k modules",
+  "-w /usr/sbin/rmmod -p x -k modules",
+  "-w /usr/sbin/modprobe -p x -k modules",
+]
+title   = "Kernel module loads"
+desc    = "insmod, rmmod and the syscalls"
+why     = "A loaded module can hide everything else from you"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_privileged_cmds"
+group   = "auditd / watches"
+key     = "-w /usr/bin/sudo -p x -k privileged"
+value   = "1"
+default = "0"
+extra   = [
+  "-w /usr/bin/su -p x -k privileged",
+  "-w /usr/bin/pkexec -p x -k privileged",
+  "-w /usr/bin/passwd -p x -k privileged",
+  "-w /usr/sbin/usermod -p x -k privileged",
+  "-w /usr/sbin/useradd -p x -k privileged",
+  "-w /usr/sbin/userdel -p x -k privileged",
+  "-w /usr/bin/chage -p x -k privileged",
+  "-w /usr/bin/crontab -p x -k privileged",
+]
+title   = "Privileged command use"
+desc    = "sudo, su, pkexec, passwd, useradd"
+why     = "Covers every normal route to elevated privilege"
+risk    = "safe"

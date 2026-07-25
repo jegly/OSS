@@ -1,0 +1,674 @@
+#  GRUB / kernel command line — BUILD_PLAN §4.4, plus the boot-menu settings
+#  from §4.23. Written as a drop-in so /etc/default/grub itself stays untouched.
+
+[section]
+id      = "grub"
+title   = "grub"
+nav     = "System"
+order   = 20
+syntax  = "grub"
+target  = "/etc/default/grub.d/99-hardening-gui.cfg"
+reload  = [["/usr/sbin/update-grub"]]
+desc    = "Kernel command-line hardening. Every flag here needs a reboot."
+
+# --------------------------------------------------------------------------- #
+#  memory
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "slab_nomerge"
+group   = "grub / memory"
+key     = "slab_nomerge"
+value   = ""
+title   = "Don't merge slab caches"
+desc    = "Separate heaps per object type"
+why     = "Merged caches let a bug in one object type corrupt another"
+risk    = "safe"
+reboot  = true
+
+[[flag]]
+id      = "init_on_alloc"
+group   = "grub / memory"
+key     = "init_on_alloc"
+value   = "1"
+default = "0"
+title   = "Zero memory on alloc"
+desc    = "Fresh pages start clean"
+why     = "Kills whole classes of uninitialised-memory info leaks"
+risk    = "safe"
+reboot  = true
+breaks  = "Small allocation-path performance cost"
+
+[[flag]]
+id      = "init_on_free"
+group   = "grub / memory"
+key     = "init_on_free"
+value   = "1"
+default = "0"
+title   = "Zero memory on free"
+desc    = "Wipes pages when released"
+why     = "Removes stale secrets and defuses use-after-free reads"
+risk    = "caution"
+reboot  = true
+breaks  = "Measurable slowdown on allocation-heavy work"
+
+[[flag]]
+id      = "page_alloc_shuffle"
+group   = "grub / memory"
+key     = "page_alloc.shuffle"
+value   = "1"
+default = "0"
+title   = "Randomise the page allocator"
+desc    = "Shuffles free-list order"
+why     = "Makes heap layout unpredictable to a groomer"
+risk    = "safe"
+reboot  = true
+
+[[flag]]
+id      = "page_poison"
+group   = "grub / memory"
+key     = "page_poison"
+value   = "1"
+default = "0"
+title   = "Poison freed pages"
+desc    = "Fills freed memory with a pattern"
+why     = "Turns a use-after-free into an obvious crash"
+risk    = "caution"
+reboot  = true
+breaks  = "Performance cost on free-heavy workloads"
+
+[[flag]]
+id      = "randomize_kstack_offset"
+group   = "grub / memory"
+key     = "randomize_kstack_offset"
+value   = "on"
+default = "off"
+title   = "Randomise kernel stack"
+desc    = "Per-syscall stack offset"
+why     = "Defeats stack-layout-dependent kernel exploits"
+risk    = "safe"
+reboot  = true
+
+[[flag]]
+id      = "vsyscall_none"
+group   = "grub / memory"
+key     = "vsyscall"
+value   = "none"
+default = "emulate"
+title   = "Remove the vsyscall page"
+desc    = "Drops a fixed-address code page"
+why     = "A page at a known address is a free ROP gadget source"
+risk    = "caution"
+reboot  = true
+breaks  = "Pre-2013 static binaries"
+
+[[flag]]
+id      = "debugfs_off"
+group   = "grub / memory"
+key     = "debugfs"
+value   = "off"
+default = "on"
+title   = "Disable debugfs"
+desc    = "No /sys/kernel/debug"
+why     = "debugfs exposes raw kernel internals with weak access checks"
+risk    = "caution"
+reboot  = true
+breaks  = "bpftrace, some tracing and GPU debug tools"
+
+[[flag]]
+id      = "extra_latent_entropy"
+group   = "grub / memory"
+key     = "extra_latent_entropy"
+value   = ""
+title   = "Extra boot entropy"
+desc    = "Harvests entropy during boot"
+why     = "Early-boot randomness is what seeds every later ASLR decision"
+risk    = "safe"
+reboot  = true
+
+# --------------------------------------------------------------------------- #
+#  LSM & lockdown
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "lsm_stack"
+group   = "grub / lsm & lockdown"
+key     = "lsm"
+value   = "lockdown,yama,apparmor,bpf"
+default = "landlock,lockdown,yama,integrity,apparmor"
+title   = "LSM stack"
+desc    = "Which security modules load"
+why     = "lockdown and yama have to be in the stack to do anything"
+risk    = "caution"
+reboot  = true
+breaks  = "Omitting a module the system relies on (keep apparmor)"
+
+[[flag]]
+id      = "lockdown"
+satisfied_by = ["confidentiality"]
+group   = "grub / lsm & lockdown"
+key     = "lockdown"
+value   = "integrity"
+default = "none"
+values  = ["integrity", "confidentiality"]
+labels  = ["integrity", "confidentiality"]
+one_way_values = ["confidentiality"]
+title   = "Kernel lockdown"
+desc    = "Blocks root from patching the kernel"
+why     = "Stops even root from loading unsigned code or reading kernel memory"
+help    = "integrity blocks writes to the running kernel (unsigned modules, kexec, /dev/mem writes). confidentiality also blocks reads of kernel memory, and cannot be relaxed at runtime. Both need signed modules for DKMS drivers to keep working."
+risk    = "caution"
+reboot  = true
+breaks  = "Unsigned DKMS (NVIDIA, VirtualBox, ZFS), kexec, hibernation, /dev/mem"
+
+[[flag]]
+id      = "module_sig_enforce"
+group   = "grub / lsm & lockdown"
+key     = "module.sig_enforce"
+value   = "1"
+default = "0"
+title   = "Require signed modules"
+desc    = "Refuses unsigned kernel modules"
+why     = "An unsigned module is arbitrary kernel code"
+help    = "With Secure Boot on, unsigned DKMS builds need a MOK enrolled first or they will not load after reboot."
+risk    = "breaking"
+reboot  = true
+breaks  = "NVIDIA/VirtualBox/ZFS DKMS without an enrolled MOK"
+
+[[flag]]
+id      = "apparmor_on"
+group   = "grub / lsm & lockdown"
+key     = "apparmor"
+value   = "1"
+default = "1"
+title   = "Enable AppArmor"
+desc    = "Turns the LSM on at boot"
+why     = "Every AppArmor profile on the system depends on this"
+risk    = "safe"
+reboot  = true
+
+# --------------------------------------------------------------------------- #
+#  CPU mitigations
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "mitigations"
+satisfied_by = ["auto,nosmt"]
+group   = "grub / cpu mitigations"
+key     = "mitigations"
+value   = "auto,nosmt"
+default = "auto"
+values  = ["auto", "auto,nosmt"]
+labels  = ["auto", "auto + no hyperthreading"]
+title   = "Speculation mitigations"
+desc    = "Master switch for CPU bug fixes"
+why     = "Meltdown/Spectre-class bugs leak memory across security boundaries"
+help    = "nosmt disables hyperthreading, which is what actually closes the cross-thread leaks — at the cost of roughly half your logical cores."
+risk    = "caution"
+reboot  = true
+breaks  = "nosmt halves logical CPU count"
+
+[[flag]]
+id      = "nosmt_force"
+group   = "grub / cpu mitigations"
+key     = "nosmt"
+value   = "force"
+default = ""
+title   = "Force SMT off"
+desc    = "Hyperthreading off, unconditionally"
+why     = "Sibling threads share caches and buffers — that's the leak"
+risk    = "breaking"
+reboot  = true
+breaks  = "Halves logical CPU count; can't be re-enabled without reboot"
+
+[[flag]]
+id      = "pti_on"
+group   = "grub / cpu mitigations"
+key     = "pti"
+value   = "on"
+default = "auto"
+title   = "Page-table isolation"
+desc    = "Separates kernel and user page tables"
+why     = "The Meltdown fix — unmaps kernel memory from user page tables"
+risk    = "safe"
+reboot  = true
+breaks  = "Syscall-heavy workload slowdown"
+
+[[flag]]
+id      = "spectre_v2"
+group   = "grub / cpu mitigations"
+key     = "spectre_v2"
+value   = "on"
+default = "auto"
+title   = "Spectre v2 mitigation"
+desc    = "Branch-target injection defence"
+why     = "Lets an attacker steer your kernel's speculative execution"
+risk    = "safe"
+reboot  = true
+
+[[flag]]
+id      = "spectre_v2_user"
+group   = "grub / cpu mitigations"
+key     = "spectre_v2_user"
+value   = "on"
+default = "auto"
+title   = "Spectre v2 (user-to-user)"
+desc    = "Isolates processes from each other"
+why     = "Without it one process can steer another's branch prediction"
+risk    = "caution"
+reboot  = true
+breaks  = "Context-switch cost"
+
+[[flag]]
+id      = "spec_store_bypass_disable"
+group   = "grub / cpu mitigations"
+key     = "spec_store_bypass_disable"
+value   = "on"
+default = "auto"
+title   = "Speculative store bypass"
+desc    = "Spectre v4 defence"
+why     = "Speculative stores expose stale values across boundaries"
+risk    = "safe"
+reboot  = true
+
+[[flag]]
+id      = "ssbd_force"
+group   = "grub / cpu mitigations"
+key     = "ssbd"
+value   = "force-on"
+default = "auto"
+title   = "Force SSBD everywhere"
+desc    = "Applies SSB defence to all tasks"
+why     = "Removes the per-process opt-in"
+risk    = "caution"
+reboot  = true
+breaks  = "Broad performance cost"
+
+[[flag]]
+id      = "l1tf"
+group   = "grub / cpu mitigations"
+key     = "l1tf"
+value   = "full,force"
+default = "flush"
+title   = "L1TF (Foreshadow)"
+desc    = "Full L1 terminal-fault defence"
+why     = "Reads L1 cache across VM and process boundaries"
+risk    = "caution"
+reboot  = true
+breaks  = "Disables SMT; heavy cost for VM hosts"
+
+[[flag]]
+id      = "mds"
+group   = "grub / cpu mitigations"
+key     = "mds"
+value   = "full,nosmt"
+default = "full"
+title   = "MDS (Zombieload)"
+desc    = "Microarchitectural data sampling"
+why     = "Leaks data from internal CPU buffers to any sibling thread"
+risk    = "caution"
+reboot  = true
+breaks  = "Disables SMT"
+
+[[flag]]
+id      = "tsx_off"
+group   = "grub / cpu mitigations"
+key     = "tsx"
+value   = "off"
+default = "off"
+title   = "Disable TSX"
+desc    = "Turns off hardware transactions"
+why     = "TSX enables TAA and several side channels, and almost nothing uses it"
+risk    = "safe"
+reboot  = true
+
+[[flag]]
+id      = "tsx_async_abort"
+group   = "grub / cpu mitigations"
+key     = "tsx_async_abort"
+value   = "full,nosmt"
+default = "full"
+title   = "TAA mitigation"
+desc    = "TSX asynchronous abort defence"
+why     = "The TSX sibling of MDS"
+risk    = "caution"
+reboot  = true
+breaks  = "Disables SMT"
+
+[[flag]]
+id      = "mmio_stale_data"
+group   = "grub / cpu mitigations"
+key     = "mmio_stale_data"
+value   = "full,nosmt"
+default = "full"
+title   = "MMIO stale data"
+desc    = "Clears buffers around MMIO"
+why     = "Device MMIO reads can return other contexts' data"
+risk    = "caution"
+reboot  = true
+breaks  = "Disables SMT"
+
+[[flag]]
+id      = "retbleed"
+group   = "grub / cpu mitigations"
+key     = "retbleed"
+value   = "auto,nosmt"
+default = "auto"
+title   = "Retbleed"
+desc    = "Return-instruction speculation"
+why     = "Return addresses are speculated from an attacker-poisoned buffer"
+risk    = "caution"
+reboot  = true
+breaks  = "Disables SMT; notable AMD Zen 1/2 cost"
+
+[[flag]]
+id      = "gather_data_sampling"
+group   = "grub / cpu mitigations"
+key     = "gather_data_sampling"
+value   = "force"
+default = "auto"
+title   = "GDS (Downfall)"
+desc    = "AVX gather data sampling"
+why     = "AVX gather instructions leak register contents across boundaries"
+risk    = "caution"
+reboot  = true
+breaks  = "AVX gather throughput"
+
+[[flag]]
+id      = "reg_file_data_sampling"
+group   = "grub / cpu mitigations"
+key     = "reg_file_data_sampling"
+value   = "on"
+default = "auto"
+title   = "RFDS"
+desc    = "Register-file data sampling"
+why     = "Atom-core register leak (2024 class)"
+risk    = "safe"
+reboot  = true
+
+[[flag]]
+id      = "spec_rstack_overflow"
+group   = "grub / cpu mitigations"
+key     = "spec_rstack_overflow"
+value   = "safe-ret"
+default = "auto"
+title   = "Inception / SRSO"
+desc    = "AMD return-stack overflow"
+why     = "Lets an attacker inject a speculative return target on Zen"
+risk    = "safe"
+reboot  = true
+
+[[flag]]
+id      = "srbds"
+group   = "grub / cpu mitigations"
+key     = "srbds"
+value   = "on"
+default = "auto"
+title   = "SRBDS"
+desc    = "Special-register buffer sampling"
+why     = "Leaks RDRAND/RDSEED output — your randomness"
+risk    = "safe"
+reboot  = true
+
+[[flag]]
+id      = "kvm_nx_huge_pages"
+group   = "grub / cpu mitigations"
+key     = "kvm.nx_huge_pages"
+value   = "force"
+default = "auto"
+title   = "iTLB multihit (KVM)"
+desc    = "Splits huge pages in guests"
+why     = "A guest can hang the host CPU via iTLB multihit"
+risk    = "caution"
+reboot  = true
+breaks  = "VM memory performance"
+
+# --------------------------------------------------------------------------- #
+#  IOMMU / DMA
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "intel_iommu"
+group   = "grub / iommu & dma"
+key     = "intel_iommu"
+value   = "on"
+default = "off"
+title   = "Intel IOMMU"
+desc    = "DMA remapping for devices"
+why     = "Without it any plugged device can read all of RAM"
+risk    = "safe"
+reboot  = true
+
+[[flag]]
+id      = "amd_iommu"
+group   = "grub / iommu & dma"
+key     = "amd_iommu"
+value   = "force_isolation"
+default = ""
+title   = "AMD IOMMU isolation"
+desc    = "Per-device DMA isolation"
+why     = "Same protection on AMD platforms"
+risk    = "safe"
+reboot  = true
+
+[[flag]]
+id      = "iommu_force"
+group   = "grub / iommu & dma"
+key     = "iommu"
+value   = "force"
+default = ""
+title   = "Force IOMMU on"
+desc    = "Even where firmware says no"
+why     = "Some firmware leaves the IOMMU off by default"
+risk    = "caution"
+reboot  = true
+breaks  = "Rare firmware/driver combinations"
+
+[[flag]]
+id      = "iommu_strict"
+group   = "grub / iommu & dma"
+key     = "iommu.strict"
+value   = "1"
+default = "0"
+title   = "Strict IOMMU flushing"
+desc    = "Invalidates TLB on every unmap"
+why     = "Lazy flushing leaves a window where freed DMA mappings still work"
+risk    = "caution"
+reboot  = true
+breaks  = "I/O throughput, especially NVMe and 10GbE"
+
+[[flag]]
+id      = "iommu_passthrough"
+group   = "grub / iommu & dma"
+key     = "iommu.passthrough"
+value   = "0"
+default = "0"
+title   = "No IOMMU passthrough"
+desc    = "Don't bypass DMA translation"
+why     = "Passthrough mode is the IOMMU doing nothing"
+risk    = "safe"
+reboot  = true
+
+[[flag]]
+id      = "efi_disable_early_pci_dma"
+group   = "grub / iommu & dma"
+key     = "efi"
+value   = "disable_early_pci_dma"
+default = ""
+title   = "Block early PCI DMA"
+desc    = "Closes the pre-boot DMA window"
+why     = "Devices can DMA before the kernel sets up the IOMMU"
+risk    = "safe"
+reboot  = true
+
+# --------------------------------------------------------------------------- #
+#  misc
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "random_trust_cpu_off"
+group   = "grub / misc"
+key     = "random.trust_cpu"
+value   = "off"
+default = "on"
+title   = "Don't trust CPU RNG"
+desc    = "RDRAND isn't the only entropy source"
+why     = "You cannot audit a hardware RNG; mixing is safer than trusting"
+risk    = "caution"
+reboot  = true
+breaks  = "Slower boot-time entropy availability"
+
+[[flag]]
+id      = "random_trust_bootloader_off"
+group   = "grub / misc"
+key     = "random.trust_bootloader"
+value   = "off"
+default = "on"
+title   = "Don't trust bootloader seed"
+desc    = "Ignores the EFI-provided seed"
+why     = "Same reasoning, one layer down"
+risk    = "caution"
+reboot  = true
+
+[[flag]]
+id      = "nohibernate"
+group   = "grub / misc"
+key     = "nohibernate"
+value   = ""
+title   = "Disable hibernation"
+desc    = "No RAM image written to disk"
+why     = "A hibernation image is your entire memory, keys included, on disk"
+risk    = "caution"
+reboot  = true
+breaks  = "Hibernate / suspend-to-disk"
+
+[[flag]]
+id      = "oops_panic"
+group   = "grub / misc"
+key     = "oops"
+value   = "panic"
+default = ""
+title   = "Panic on oops (boot)"
+desc    = "Same as the sysctl, from boot"
+why     = "Covers oopses that happen before sysctl runs"
+risk    = "caution"
+reboot  = true
+
+[[flag]]
+id      = "grub_panic_timeout"
+group   = "grub / misc"
+key     = "panic"
+value   = "20"
+default = "0"
+title   = "Reboot after panic (boot)"
+desc    = "Early-boot version of kernel.panic"
+why     = "A panic before sysctl otherwise leaves the box sitting there"
+risk    = "safe"
+reboot  = true
+
+[[flag]]
+id      = "loglevel_quiet"
+group   = "grub / misc"
+key     = "loglevel"
+value   = "0"
+default = "4"
+title   = "Silent boot log"
+desc    = "No kernel messages on console"
+why     = "Boot output leaks hardware and kernel detail to onlookers"
+risk    = "safe"
+reboot  = true
+
+[[flag]]
+id      = "ipv6_disable_boot"
+group   = "grub / misc"
+key     = "ipv6.disable"
+value   = "1"
+default = "0"
+title   = "Disable IPv6 at boot"
+desc    = "Stack never comes up at all"
+why     = "Stronger than the sysctl — the stack is never initialised"
+risk    = "breaking"
+reboot  = true
+breaks  = "All IPv6, including ::1"
+
+[[flag]]
+id      = "pci_noaer"
+group   = "grub / misc"
+key     = "pci"
+value   = "noaer"
+default = ""
+title   = "Disable PCI AER"
+desc    = "Quietens PCIe error reporting"
+why     = "AER storms are a noisy log-flood channel"
+risk    = "safe"
+reboot  = true
+
+[[flag]]
+id      = "libata_noncq"
+group   = "grub / misc"
+key     = "libata.force"
+value   = "noncq"
+default = ""
+title   = "Disable SATA NCQ"
+desc    = "Serialises disk command queueing"
+why     = "Removes a firmware-side reordering surface"
+risk    = "caution"
+reboot  = true
+breaks  = "Disk throughput"
+
+[[flag]]
+id      = "slab_debug"
+group   = "grub / misc"
+key     = "slab_debug"
+value   = "FZP"
+default = ""
+title   = "Slab debug checks"
+desc    = "Red zones + poison on every alloc"
+why     = "Catches heap corruption at the moment it happens"
+help    = "Real hardening value, heavy performance tax. Also disables slab merging on its own, which makes slab_nomerge redundant while this is on. Deliberately not in the recommended preset."
+risk    = "caution"
+reboot  = true
+breaks  = "Significant slowdown across the whole system"
+
+# --------------------------------------------------------------------------- #
+#  boot menu (§4.23 — the GRUB_ variables; the password lives in `bootloader`)
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "grub_disable_recovery"
+group   = "grub / boot menu"
+key     = "GRUB_DISABLE_RECOVERY"
+value   = "true"
+default = "false"
+title   = "No recovery entries"
+desc    = "Removes single-user boot options"
+why     = "Recovery mode is a root shell with no password"
+risk    = "caution"
+reboot  = true
+breaks  = "Recovery boot (use install media instead)"
+
+[[flag]]
+id      = "grub_disable_os_prober"
+group   = "grub / boot menu"
+key     = "GRUB_DISABLE_OS_PROBER"
+value   = "true"
+default = "true"
+title   = "Don't probe other OSes"
+desc    = "Skips scanning other partitions"
+why     = "os-prober mounts unknown filesystems as root at update-grub time"
+risk    = "safe"
+reboot  = true
+breaks  = "Dual-boot menu entries"
+
+[[flag]]
+id      = "grub_timeout_zero"
+group   = "grub / boot menu"
+key     = "GRUB_TIMEOUT"
+value   = "0"
+default = "5"
+title   = "No boot menu delay"
+desc    = "Boots immediately, no prompt"
+why     = "Shrinks the window for editing the kernel command line"
+risk    = "caution"
+reboot  = true
+breaks  = "Choosing an older kernel at boot"

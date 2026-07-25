@@ -1,0 +1,250 @@
+# Catppuccin: 4 flavors x 14 accents, official palette values.
+#
+# `pairing` carries the hue-adjacent secondary/tertiary companions; the app uses
+# them unless monochrome accents are switched on.
+
+[family]
+key = "catppuccin"
+name = "Catppuccin"
+
+[[flavor]]
+key = "latte"
+name = "Latte"
+dark = false
+text = "#4c4f69"
+subtext1 = "#5c5f77"
+overlay1 = "#8c8fa1"
+overlay0 = "#9ca0b0"
+surface2 = "#acb0be"
+surface1 = "#bcc0cc"
+surface0 = "#ccd0da"
+base = "#eff1f5"
+mantle = "#e6e9ef"
+crust = "#dce0e8"
+
+[[flavor]]
+key = "frappe"
+name = "Frappé"
+dark = true
+text = "#c6d0f5"
+subtext1 = "#b5bfe2"
+overlay1 = "#838ba7"
+overlay0 = "#737994"
+surface2 = "#626880"
+surface1 = "#51576d"
+surface0 = "#414559"
+base = "#303446"
+mantle = "#292c3c"
+crust = "#232634"
+
+[[flavor]]
+key = "macchiato"
+name = "Macchiato"
+dark = true
+text = "#cad3f5"
+subtext1 = "#b8c0e0"
+overlay1 = "#8087a2"
+overlay0 = "#6e738d"
+surface2 = "#5b6078"
+surface1 = "#494d64"
+surface0 = "#363a4f"
+base = "#24273a"
+mantle = "#1e2030"
+crust = "#181926"
+
+[[flavor]]
+key = "mocha"
+name = "Mocha"
+dark = true
+text = "#cdd6f4"
+subtext1 = "#bac2de"
+overlay1 = "#7f849c"
+overlay0 = "#6c7086"
+surface2 = "#585b70"
+surface1 = "#45475a"
+surface0 = "#313244"
+base = "#1e1e2e"
+mantle = "#181825"
+crust = "#11111b"
+
+[[accent]]
+key = "rosewater"
+name = "Rosewater"
+latte = "#dc8a78"
+frappe = "#f2d5cf"
+macchiato = "#f4dbd6"
+mocha = "#f5e0dc"
+
+[[accent]]
+key = "flamingo"
+name = "Flamingo"
+latte = "#dd7878"
+frappe = "#eebebe"
+macchiato = "#f0c6c6"
+mocha = "#f2cdcd"
+
+[[accent]]
+key = "pink"
+name = "Pink"
+latte = "#ea76cb"
+frappe = "#f4b8e4"
+macchiato = "#f5bde6"
+mocha = "#f5c2e7"
+
+[[accent]]
+key = "mauve"
+name = "Mauve"
+latte = "#8839ef"
+frappe = "#ca9ee6"
+macchiato = "#c6a0f6"
+mocha = "#cba6f7"
+
+[[accent]]
+key = "red"
+name = "Red"
+latte = "#d20f39"
+frappe = "#e78284"
+macchiato = "#ed8796"
+mocha = "#f38ba8"
+
+[[accent]]
+key = "maroon"
+name = "Maroon"
+latte = "#e64553"
+frappe = "#ea999c"
+macchiato = "#ee99a0"
+mocha = "#eba0ac"
+
+[[accent]]
+key = "peach"
+name = "Peach"
+latte = "#fe640b"
+frappe = "#ef9f76"
+macchiato = "#f5a97f"
+mocha = "#fab387"
+
+[[accent]]
+key = "yellow"
+name = "Yellow"
+latte = "#df8e1d"
+frappe = "#e5c890"
+macchiato = "#eed49f"
+mocha = "#f9e2af"
+
+[[accent]]
+key = "green"
+name = "Green"
+latte = "#40a02b"
+frappe = "#a6d189"
+macchiato = "#a6da95"
+mocha = "#a6e3a1"
+
+[[accent]]
+key = "teal"
+name = "Teal"
+latte = "#179299"
+frappe = "#81c8be"
+macchiato = "#8bd5ca"
+mocha = "#94e2d5"
+
+[[accent]]
+key = "sky"
+name = "Sky"
+latte = "#04a5e5"
+frappe = "#99d1db"
+macchiato = "#91d7e3"
+mocha = "#89dceb"
+
+[[accent]]
+key = "sapphire"
+name = "Sapphire"
+latte = "#209fb5"
+frappe = "#85c1dc"
+macchiato = "#7dc4e4"
+mocha = "#74c7ec"
+
+[[accent]]
+key = "blue"
+name = "Blue"
+latte = "#1e66f5"
+frappe = "#8caaee"
+macchiato = "#8aadf4"
+mocha = "#89b4fa"
+
+[[accent]]
+key = "lavender"
+name = "Lavender"
+latte = "#7287fd"
+frappe = "#babbf1"
+macchiato = "#b7bdf8"
+mocha = "#b4befe"
+
+[[pairing]]
+accent = "rosewater"
+secondary = "flamingo"
+tertiary = "pink"
+
+[[pairing]]
+accent = "flamingo"
+secondary = "pink"
+tertiary = "mauve"
+
+[[pairing]]
+accent = "pink"
+secondary = "mauve"
+tertiary = "lavender"
+
+[[pairing]]
+accent = "mauve"
+secondary = "lavender"
+tertiary = "pink"
+
+[[pairing]]
+accent = "red"
+secondary = "maroon"
+tertiary = "peach"
+
+[[pairing]]
+accent = "maroon"
+secondary = "red"
+tertiary = "peach"
+
+[[pairing]]
+accent = "peach"
+secondary = "yellow"
+tertiary = "green"
+
+[[pairing]]
+accent = "yellow"
+secondary = "peach"
+tertiary = "green"
+
+[[pairing]]
+accent = "green"
+secondary = "teal"
+tertiary = "sky"
+
+[[pairing]]
+accent = "teal"
+secondary = "sky"
+tertiary = "green"
+
+[[pairing]]
+accent = "sky"
+secondary = "sapphire"
+tertiary = "teal"
+
+[[pairing]]
+accent = "sapphire"
+secondary = "blue"
+tertiary = "sky"
+
+[[pairing]]
+accent = "blue"
+secondary = "lavender"
+tertiary = "sapphire"
+
+[[pairing]]
+accent = "lavender"
+secondary = "blue"
+tertiary = "mauve"

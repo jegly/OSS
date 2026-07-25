@@ -1,0 +1,110 @@
+#  NetworkManager & MAC privacy — BUILD_PLAN §4.20
+
+[section]
+id      = "network"
+title   = "network"
+nav     = "Network"
+order   = 94
+syntax  = "ini"
+target  = "/etc/NetworkManager/conf.d/99-hardening-gui.conf"
+reload  = [["/usr/bin/systemctl", "reload", "NetworkManager.service"]]
+desc    = "MAC-address privacy and LAN name-broadcast settings in NetworkManager."
+
+[[flag]]
+id          = "nm_scan_rand_mac"
+group       = "network / mac privacy"
+key         = "wifi.scan-rand-mac-address"
+value       = "yes"
+default     = "yes"
+ini_section = "device"
+title       = "Random MAC while scanning"
+desc        = "Probe requests use a throwaway MAC"
+why         = "Your real MAC is broadcast in every scan otherwise — that's how shop Wi-Fi tracks you"
+risk        = "safe"
+
+[[flag]]
+id          = "nm_wifi_cloned_mac"
+group       = "network / mac privacy"
+key         = "wifi.cloned-mac-address"
+value       = "stable"
+default     = "preserve"
+values      = ["preserve", "stable", "random"]
+labels       = ["real MAC", "stable per network", "fully random"]
+ini_section = "connection"
+title       = "Wi-Fi MAC policy"
+desc        = "Which MAC you connect with"
+why         = "A constant MAC identifies your machine across every network it joins"
+help        = "'stable' derives a different but consistent MAC per network — you stay unlinkable across networks while DHCP reservations and captive portals keep working. 'random' changes on every connection and is what breaks them."
+risk        = "caution"
+breaks      = "'random' breaks MAC-based DHCP reservations, captive portals, enterprise 802.1X"
+
+[[flag]]
+id          = "nm_ethernet_cloned_mac"
+group       = "network / mac privacy"
+key         = "ethernet.cloned-mac-address"
+value       = "stable"
+default     = "preserve"
+values      = ["preserve", "stable", "random"]
+labels      = ["real MAC", "stable per network", "fully random"]
+ini_section = "connection"
+title       = "Ethernet MAC policy"
+desc        = "Same, for wired connections"
+why         = "Wired MACs are just as identifying as wireless ones"
+risk        = "caution"
+breaks      = "'random' breaks wired DHCP reservations and port security"
+
+[[flag]]
+id          = "nm_stable_id"
+group       = "network / mac privacy"
+key         = "connection.stable-id"
+value       = "${CONNECTION}/${BOOT}"
+default     = "${CONNECTION}"
+ini_section = "connection"
+title       = "Re-randomise each boot"
+desc        = "Stable MAC changes on reboot"
+why         = "Keeps per-network stability but drops the long-term identifier"
+risk        = "caution"
+breaks      = "DHCP reservations that expect the same MAC after a reboot"
+
+[[flag]]
+id          = "nm_ip6_privacy"
+group       = "network / mac privacy"
+key         = "ipv6.ip6-privacy"
+value       = "2"
+default     = "-1"
+values      = ["0", "1", "2"]
+labels      = ["off", "enabled, prefer public", "enabled, prefer temporary"]
+ini_section = "connection"
+title       = "IPv6 privacy extensions"
+desc        = "Rotating IPv6 source addresses"
+why         = "A MAC-derived IPv6 address follows you across every network"
+risk        = "safe"
+
+[[flag]]
+id          = "nm_mdns"
+group       = "network / lan leaks"
+key         = "connection.mdns"
+value       = "0"
+default     = "-1"
+values      = ["0", "1", "2"]
+labels      = ["off", "resolve only", "resolve and announce"]
+ini_section = "connection"
+title       = "No mDNS in NetworkManager"
+desc        = "Second half of the resolved switch"
+why         = "resolved and NetworkManager both have to agree, or mDNS comes back"
+risk        = "caution"
+breaks      = "Network printer and cast-device discovery"
+
+[[flag]]
+id          = "nm_llmnr"
+group       = "network / lan leaks"
+key         = "connection.llmnr"
+value       = "0"
+default     = "-1"
+values      = ["0", "1", "2"]
+labels      = ["off", "resolve only", "resolve and announce"]
+ini_section = "connection"
+title       = "No LLMNR in NetworkManager"
+desc        = "Same, for LLMNR"
+why         = "Stops your hostname being announced to the segment"
+risk        = "safe"

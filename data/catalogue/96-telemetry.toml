@@ -1,0 +1,93 @@
+#  Telemetry & crash reporting — BUILD_PLAN §4.21
+#
+#  The gsettings flags run as *you*, not as root — dconf is a per-user database,
+#  so these are the one group the app applies without pkexec.
+
+[section]
+id      = "telemetry"
+title   = "telemetry"
+nav     = "Desktop"
+order   = 96
+syntax  = "gsettings"
+desc    = "Stop the desktop reporting your activity, locally or upstream."
+
+[[flag]]
+id      = "gnome_report_technical_problems"
+group   = "telemetry / gnome privacy"
+key     = "org.gnome.desktop.privacy report-technical-problems"
+value   = "false"
+default = "true"
+title   = "No problem reporting"
+desc    = "Won't send crash reports"
+why     = "Crash reports include memory contents and open file paths"
+risk    = "safe"
+
+[[flag]]
+id      = "gnome_send_software_usage_stats"
+group   = "telemetry / gnome privacy"
+key     = "org.gnome.desktop.privacy send-software-usage-stats"
+value   = "false"
+default = "false"
+title   = "No usage statistics"
+desc    = "Won't report which apps you run"
+why     = "Your application list is a fingerprint"
+risk    = "safe"
+
+[[flag]]
+id      = "gnome_remember_recent_files"
+group   = "telemetry / local history"
+key     = "org.gnome.desktop.privacy remember-recent-files"
+value   = "false"
+default = "true"
+title   = "No recent-files list"
+desc    = "Stops recording what you opened"
+why     = "recently-used.xbel is a plaintext log of every file you touched"
+risk    = "safe"
+breaks  = "Recent files in file pickers and the dash"
+
+[[flag]]
+id      = "gnome_remove_old_temp_files"
+group   = "telemetry / local history"
+key     = "org.gnome.desktop.privacy remove-old-temp-files"
+value   = "true"
+default = "false"
+title   = "Purge old temp files"
+desc    = "Clears /tmp leftovers automatically"
+why     = "Temp files outlive the program that wrote them"
+risk    = "safe"
+
+[[flag]]
+id      = "gnome_remove_old_trash_files"
+group   = "telemetry / local history"
+key     = "org.gnome.desktop.privacy remove-old-trash-files"
+value   = "true"
+default = "false"
+title   = "Purge old trash"
+desc    = "Empties trash on a schedule"
+why     = "Deleted-but-not-really files sit in trash indefinitely"
+risk    = "safe"
+
+[[flag]]
+id      = "gnome_disable_camera"
+group   = "telemetry / sensors"
+key     = "org.gnome.desktop.privacy disable-camera"
+value   = "true"
+default = "false"
+title   = "Block camera access"
+desc    = "Desktop-level camera switch"
+why     = "A software switch above per-app permissions"
+help    = "This is a portal-level block, not a hardware one — the modprobe blacklist for uvcvideo is the version an app cannot talk its way past."
+risk    = "caution"
+breaks  = "Video calls"
+
+[[flag]]
+id      = "gnome_disable_microphone"
+group   = "telemetry / sensors"
+key     = "org.gnome.desktop.privacy disable-microphone"
+value   = "true"
+default = "false"
+title   = "Block microphone access"
+desc    = "Desktop-level mic switch"
+why     = "Same idea for audio capture"
+risk    = "caution"
+breaks  = "Voice calls and recording"

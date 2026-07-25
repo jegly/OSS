@@ -1,0 +1,660 @@
+# Ptyxis terminal palettes, ported for the GTK theme engine.
+#
+# The 33 `set = "extended"` entries were extracted verbatim from the Ptyxis
+# gresource bundle and carry their complete 16-slot ANSI table. The 11
+# `set = "curated"` entries keep the hand-picked accents from Ptyxis.kt.
+# Surfaces are derived at runtime by mixing background toward foreground and
+# black, so every palette keeps its own hue.
+
+[family]
+key = "ptyxis"
+name = "Ptyxis"
+
+[[palette]]
+key = "ptyxis_fairy_floss"
+name = "Fairy Floss"
+family = "ptyxis"
+set = "curated"
+dark = true
+background = "#5A5475"
+foreground = "#C2FFDF"
+cursor = "#C2FFDF"
+primary = "#FFB8D1"
+secondary = "#AE81FF"
+tertiary = "#C2FFDF"
+error = "#FF857F"
+
+[[palette]]
+key = "ptyxis_nord"
+name = "Nord"
+family = "ptyxis"
+set = "curated"
+dark = true
+background = "#2E3440"
+foreground = "#D8DEE9"
+cursor = "#D8DEE9"
+primary = "#88C0D0"
+secondary = "#81A1C1"
+tertiary = "#8FBCBB"
+error = "#BF616A"
+
+[[palette]]
+key = "ptyxis_bim"
+name = "Bim"
+family = "ptyxis"
+set = "curated"
+dark = true
+background = "#012849"
+foreground = "#A9BED8"
+cursor = "#A9BED8"
+primary = "#5EA2EC"
+secondary = "#F557A0"
+tertiary = "#A9EE55"
+error = "#F557A0"
+
+[[palette]]
+key = "ptyxis_borland"
+name = "Borland"
+family = "ptyxis"
+set = "curated"
+dark = true
+background = "#0000A4"
+foreground = "#FFFF4E"
+cursor = "#FFFF4E"
+primary = "#FFFF4E"
+secondary = "#FF73FD"
+tertiary = "#96CBFE"
+error = "#FF6C60"
+
+[[palette]]
+key = "ptyxis_c64"
+name = "C64"
+family = "ptyxis"
+set = "curated"
+dark = true
+background = "#40318D"
+foreground = "#7869C4"
+cursor = "#7869C4"
+primary = "#67B6BD"
+secondary = "#BFCE72"
+tertiary = "#8B3F96"
+error = "#883932"
+
+[[palette]]
+key = "ptyxis_cobalt_neon"
+name = "Cobalt Neon"
+family = "ptyxis"
+set = "curated"
+dark = true
+background = "#142838"
+foreground = "#8FF586"
+cursor = "#8FF586"
+primary = "#8FF586"
+secondary = "#3BA5FF"
+tertiary = "#E9E75C"
+error = "#FF2320"
+
+[[palette]]
+key = "ptyxis_grass"
+name = "Grass"
+family = "ptyxis"
+set = "curated"
+dark = true
+background = "#13773D"
+foreground = "#FFF0A5"
+cursor = "#FFF0A5"
+primary = "#E7B000"
+secondary = "#00BBBB"
+tertiary = "#FFF0A5"
+error = "#BB0000"
+
+[[palette]]
+key = "ptyxis_homebrew_ocean"
+name = "Homebrew Ocean"
+family = "ptyxis"
+set = "curated"
+dark = true
+background = "#224FBC"
+foreground = "#FFFFFF"
+cursor = "#FFFFFF"
+primary = "#00A6B2"
+secondary = "#00A600"
+tertiary = "#999900"
+error = "#990000"
+
+[[palette]]
+key = "ptyxis_mono_amber"
+name = "Mono Amber"
+family = "ptyxis"
+set = "curated"
+dark = true
+background = "#2B1900"
+foreground = "#FF9400"
+cursor = "#FF9400"
+primary = "#FF9400"
+secondary = "#FF9400"
+tertiary = "#FF9400"
+error = "#FF9400"
+
+[[palette]]
+key = "ptyxis_mono_red"
+name = "Mono Red"
+family = "ptyxis"
+set = "curated"
+dark = true
+background = "#2B0C00"
+foreground = "#FF3600"
+cursor = "#FF3600"
+primary = "#FF3600"
+secondary = "#FF3600"
+tertiary = "#FF3600"
+error = "#FF3600"
+
+[[palette]]
+key = "ptyxis_synthwave"
+name = "Synthwave"
+family = "ptyxis"
+set = "curated"
+dark = true
+background = "#262335"
+foreground = "#FFFFFF"
+cursor = "#FFFFFF"
+primary = "#FF7EDB"
+secondary = "#03EDF9"
+tertiary = "#FEDE5D"
+error = "#FE4450"
+
+[[palette]]
+key = "ptyxis_aci"
+name = "Aci"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#0D1926"
+foreground = "#B4E1FD"
+cursor = "#B4E1FD"
+primary = "#0883FF"
+secondary = "#8308FF"
+tertiary = "#08FF83"
+error = "#FF0883"
+ansi = ["#363636", "#FF0883", "#83FF08", "#FF8308", "#0883FF", "#8308FF", "#08FF83", "#B6B6B6", "#424242", "#FF1E8E", "#8EFF1E", "#FF8E1E", "#1E8EFF", "#8E1EFF", "#1EFF8E", "#C2C2C2"]
+
+[[palette]]
+key = "ptyxis_afterglow"
+name = "Afterglow"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#222222"
+foreground = "#D0D0D0"
+cursor = "#D0D0D0"
+primary = "#6C99BB"
+secondary = "#9F4E85"
+tertiary = "#7DD6CF"
+error = "#A53C23"
+ansi = ["#151515", "#A53C23", "#7B9246", "#D3A04D", "#6C99BB", "#9F4E85", "#7DD6CF", "#D0D0D0", "#505050", "#A53C23", "#7B9246", "#D3A04D", "#547C99", "#9F4E85", "#7DD6CF", "#F5F5F5"]
+
+[[palette]]
+key = "ptyxis_argonaut"
+name = "Argonaut"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#0E1019"
+foreground = "#FFFAF4"
+cursor = "#FFFAF4"
+primary = "#008DF8"
+secondary = "#6D43A6"
+tertiary = "#00D8EB"
+error = "#FF000F"
+ansi = ["#232323", "#FF000F", "#8CE10B", "#FFB900", "#008DF8", "#6D43A6", "#00D8EB", "#FFFFFF", "#444444", "#FF2740", "#ABE15B", "#FFD242", "#0092FF", "#9A5FEB", "#67FFF0", "#FFFFFF"]
+
+[[palette]]
+key = "ptyxis_aura"
+name = "Aura"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#15141B"
+foreground = "#EDECEE"
+cursor = "#EDECEE"
+primary = "#A277FF"
+secondary = "#A277FF"
+tertiary = "#61FFCA"
+error = "#FF6767"
+ansi = ["#110F18", "#FF6767", "#61FFCA", "#FFCA85", "#A277FF", "#A277FF", "#61FFCA", "#EDECEE", "#6D6D6D", "#FFCA85", "#A277FF", "#FFCA85", "#A277FF", "#A277FF", "#61FFCA", "#EDECEE"]
+
+[[palette]]
+key = "ptyxis_ayu_mirage"
+name = "Ayu Mirage"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#1F2430"
+foreground = "#CBCCC6"
+cursor = "#FFCC66"
+primary = "#73D0FF"
+secondary = "#D4BFFF"
+tertiary = "#95E6CB"
+error = "#FF3333"
+ansi = ["#1F2430", "#FF3333", "#BAE67E", "#FFA759", "#73D0FF", "#D4BFFF", "#95E6CB", "#CBCCC6", "#707A8C", "#FF3333", "#BAE67E", "#FFA759", "#73D0FF", "#D4BFFF", "#95E6CB", "#CBCCC6"]
+
+[[palette]]
+key = "ptyxis_belafonte"
+name = "Belafonte"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#20111B"
+foreground = "#968C83"
+cursor = "#968C83"
+primary = "#426A79"
+secondary = "#97522C"
+tertiary = "#989A9C"
+error = "#BE100E"
+ansi = ["#20111B", "#BE100E", "#858162", "#EAA549", "#426A79", "#97522C", "#989A9C", "#968C83", "#5E5252", "#BE100E", "#858162", "#EAA549", "#426A79", "#97522C", "#989A9C", "#D5CCBA"]
+
+[[palette]]
+key = "ptyxis_birds_of_paradise"
+name = "Birds Of Paradise"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#2A1F1D"
+foreground = "#E0DBB7"
+cursor = "#E0DBB7"
+primary = "#5A86AD"
+secondary = "#AC80A6"
+tertiary = "#74A6AD"
+error = "#BE2D26"
+ansi = ["#573D26", "#BE2D26", "#6BA18A", "#E99D2A", "#5A86AD", "#AC80A6", "#74A6AD", "#E0DBB7", "#9B6C4A", "#E84627", "#95D8BA", "#D0D150", "#B8D3ED", "#D19ECB", "#93CFD7", "#FFF9D5"]
+
+[[palette]]
+key = "ptyxis_blazer"
+name = "Blazer"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#0D1926"
+foreground = "#D9E6F2"
+cursor = "#D9E6F2"
+primary = "#7A7AB8"
+secondary = "#B87AB8"
+tertiary = "#7AB8B8"
+error = "#B87A7A"
+ansi = ["#000000", "#B87A7A", "#7AB87A", "#B8B87A", "#7A7AB8", "#B87AB8", "#7AB8B8", "#D9D9D9", "#262626", "#DBBDBD", "#BDDBBD", "#DBDBBD", "#BDBDDB", "#DBBDDB", "#BDDBDB", "#FFFFFF"]
+
+[[palette]]
+key = "ptyxis_brogrammer"
+name = "Brogrammer"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#131313"
+foreground = "#D6DBE5"
+cursor = "#D6DBE5"
+primary = "#2A84D2"
+secondary = "#4E5AB7"
+tertiary = "#1081D6"
+error = "#F81118"
+ansi = ["#1F1F1F", "#F81118", "#2DC55E", "#ECBA0F", "#2A84D2", "#4E5AB7", "#1081D6", "#D6DBE5", "#D6DBE5", "#DE352E", "#1DD361", "#F3BD09", "#1081D6", "#5350B9", "#0F7DDB", "#FFFFFF"]
+
+[[palette]]
+key = "ptyxis_chalkboard"
+name = "Chalkboard"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#29262F"
+foreground = "#D9E6F2"
+cursor = "#D9E6F2"
+primary = "#7372C3"
+secondary = "#C372C2"
+tertiary = "#72C2C3"
+error = "#C37372"
+ansi = ["#000000", "#C37372", "#72C373", "#C2C372", "#7372C3", "#C372C2", "#72C2C3", "#D9D9D9", "#323232", "#DBAAAA", "#AADBAA", "#DADBAA", "#AAAADB", "#DBAADA", "#AADADB", "#FFFFFF"]
+
+[[palette]]
+key = "ptyxis_espresso_libre"
+name = "Espresso Libre"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#2A211C"
+foreground = "#B8A898"
+cursor = "#B8A898"
+primary = "#0066FF"
+secondary = "#C5656B"
+tertiary = "#06989A"
+error = "#CC0000"
+ansi = ["#000000", "#CC0000", "#1A921C", "#F0E53A", "#0066FF", "#C5656B", "#06989A", "#D3D7CF", "#555753", "#EF2929", "#9AFF87", "#FFFB5C", "#43A8ED", "#FF818A", "#34E2E2", "#EEEEEC"]
+
+[[palette]]
+key = "ptyxis_everforest"
+name = "Everforest"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#2D353B"
+foreground = "#D3C6AA"
+cursor = "#D3C6AA"
+primary = "#7FBBB3"
+secondary = "#D699B6"
+tertiary = "#83C092"
+error = "#E67E80"
+ansi = ["#4B565C", "#E67E80", "#A7C080", "#DBBC7F", "#7FBBB3", "#D699B6", "#83C092", "#D3C6AA", "#5C6A72", "#F85552", "#8DA101", "#DFA000", "#3A94C5", "#DF69BA", "#35A77C", "#DFDDC8"]
+
+[[palette]]
+key = "ptyxis_flatland"
+name = "Flatland"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#1D1F21"
+foreground = "#B8DBEF"
+cursor = "#B8DBEF"
+primary = "#5096BE"
+secondary = "#695ABC"
+tertiary = "#D63865"
+error = "#F18339"
+ansi = ["#1D1D19", "#F18339", "#9FD364", "#F4EF6D", "#5096BE", "#695ABC", "#D63865", "#FFFFFF", "#1D1D19", "#D22A24", "#A7D42C", "#FF8949", "#61B9D0", "#695ABC", "#D63865", "#FFFFFF"]
+
+[[palette]]
+key = "ptyxis_github"
+name = "Github"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#101216"
+foreground = "#8B949E"
+cursor = "#C9D1D9"
+primary = "#6CA4F8"
+secondary = "#DB61A2"
+tertiary = "#2B7489"
+error = "#F78166"
+ansi = ["#000000", "#F78166", "#56D364", "#E3B341", "#6CA4F8", "#DB61A2", "#2B7489", "#FFFFFF", "#4D4D4D", "#F78166", "#56D364", "#E3B341", "#6CA4F8", "#DB61A2", "#2B7489", "#FFFFFF"]
+
+[[palette]]
+key = "ptyxis_ibm3270"
+name = "Ibm3270"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#000000"
+foreground = "#FDFDFD"
+cursor = "#FDFDFD"
+primary = "#7890F0"
+secondary = "#F078D8"
+tertiary = "#54E4E4"
+error = "#F01818"
+ansi = ["#222222", "#F01818", "#24D830", "#F0D824", "#7890F0", "#F078D8", "#54E4E4", "#A5A5A5", "#888888", "#EF8383", "#7ED684", "#EFE28B", "#B3BFEF", "#EFB3E3", "#9CE2E2", "#FFFFFF"]
+
+[[palette]]
+key = "ptyxis_ic_green_ppl"
+name = "Ic Green Ppl"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#3A3D3F"
+foreground = "#D9EFD3"
+cursor = "#D9EFD3"
+primary = "#149B45"
+secondary = "#53B82C"
+tertiary = "#2CB868"
+error = "#FB002A"
+ansi = ["#1F1F1F", "#FB002A", "#339C24", "#659B25", "#149B45", "#53B82C", "#2CB868", "#E0FFEF", "#032710", "#A7FF3F", "#9FFF6D", "#D2FF6D", "#72FFB5", "#50FF3E", "#22FF71", "#DAEFD0"]
+
+[[palette]]
+key = "ptyxis_kanagawa"
+name = "Kanagawa"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#1F1F28"
+foreground = "#DCD7BA"
+cursor = "#DCD7BA"
+primary = "#7E9CD8"
+secondary = "#957FB8"
+tertiary = "#6A9589"
+error = "#C34043"
+ansi = ["#090618", "#C34043", "#76946A", "#C0A36E", "#7E9CD8", "#957FB8", "#6A9589", "#DCD7BA", "#727169", "#E82424", "#98BB6C", "#E6C384", "#7FB4CA", "#938AA9", "#7AA89F", "#C8C093"]
+
+[[palette]]
+key = "ptyxis_material"
+name = "Material"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#1E282C"
+foreground = "#C3C7D1"
+cursor = "#657B83"
+primary = "#80CBC3"
+secondary = "#FF2490"
+tertiary = "#AEDDFF"
+error = "#EB606B"
+ansi = ["#073641", "#EB606B", "#C3E88D", "#F7EB95", "#80CBC3", "#FF2490", "#AEDDFF", "#FFFFFF", "#002B36", "#EB606B", "#C3E88D", "#F7EB95", "#7DC6BF", "#6C71C3", "#34434D", "#FFFFFF"]
+
+[[palette]]
+key = "ptyxis_mona_lisa"
+name = "Mona Lisa"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#120B0D"
+foreground = "#F7D66A"
+cursor = "#F7D66A"
+primary = "#515C5D"
+secondary = "#9B1D29"
+tertiary = "#588056"
+error = "#9B291C"
+ansi = ["#351B0E", "#9B291C", "#636232", "#C36E28", "#515C5D", "#9B1D29", "#588056", "#F7D75C", "#874228", "#FF4331", "#B4B264", "#FF9566", "#9EB2B4", "#FF5B6A", "#8ACD8F", "#FFE598"]
+
+[[palette]]
+key = "ptyxis_mono_cyan"
+name = "Mono Cyan"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#00222B"
+foreground = "#00CCFF"
+cursor = "#00CCFF"
+primary = "#00CCFF"
+secondary = "#00CCFF"
+tertiary = "#00CCFF"
+error = "#00CCFF"
+ansi = ["#003340", "#00CCFF", "#00CCFF", "#00CCFF", "#00CCFF", "#00CCFF", "#00CCFF", "#00CCFF", "#00CCFF", "#00CCFF", "#00CCFF", "#00CCFF", "#00CCFF", "#00CCFF", "#00CCFF", "#00CCFF"]
+
+[[palette]]
+key = "ptyxis_monokai_pro"
+name = "Monokai Pro"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#363537"
+foreground = "#FDF9F3"
+cursor = "#FDF9F3"
+primary = "#FC9867"
+secondary = "#AB9DF2"
+tertiary = "#78DCE8"
+error = "#FF6188"
+ansi = ["#363537", "#FF6188", "#A9DC76", "#FFD866", "#FC9867", "#AB9DF2", "#78DCE8", "#FDF9F3", "#908E8F", "#FF6188", "#A9DC76", "#FFD866", "#FC9867", "#AB9DF2", "#78DCE8", "#FDF9F3"]
+
+[[palette]]
+key = "ptyxis_omni"
+name = "Omni"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#191622"
+foreground = "#ABB2BF"
+cursor = "#ABB2BF"
+primary = "#78D1E1"
+secondary = "#988BC7"
+tertiary = "#FF79C6"
+error = "#E96379"
+ansi = ["#191622", "#E96379", "#67E480", "#E89E64", "#78D1E1", "#988BC7", "#FF79C6", "#ABB2BF", "#000000", "#E96379", "#67E480", "#E89E64", "#78D1E1", "#988BC7", "#FF79C6", "#FFFFFF"]
+
+[[palette]]
+key = "ptyxis_paraiso_dark"
+name = "Paraiso Dark"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#2F1E2E"
+foreground = "#A39E9B"
+cursor = "#A39E9B"
+primary = "#06B6EF"
+secondary = "#815BA4"
+tertiary = "#5BC4BF"
+error = "#EF6155"
+ansi = ["#2F1E2E", "#EF6155", "#48B685", "#FEC418", "#06B6EF", "#815BA4", "#5BC4BF", "#A39E9B", "#776E71", "#EF6155", "#48B685", "#FEC418", "#06B6EF", "#815BA4", "#5BC4BF", "#E7E9DB"]
+
+[[palette]]
+key = "ptyxis_pixiefloss"
+name = "Pixiefloss"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#241F33"
+foreground = "#D1CAE8"
+cursor = "#D1CAE8"
+primary = "#AE81FF"
+secondary = "#EF6155"
+tertiary = "#C2FFDF"
+error = "#FF857F"
+ansi = ["#2F2942", "#FF857F", "#48B685", "#E6C000", "#AE81FF", "#EF6155", "#C2FFDF", "#F8F8F2", "#75507B", "#F1568E", "#5ADBA2", "#D5A425", "#C5A3FF", "#EF6155", "#C2FFFF", "#F8F8F0"]
+
+[[palette]]
+key = "ptyxis_powershell"
+name = "Powershell"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#052454"
+foreground = "#F6F6F7"
+cursor = "#F6F6F7"
+primary = "#010083"
+secondary = "#D33682"
+tertiary = "#0E807F"
+error = "#7E0008"
+ansi = ["#000000", "#7E0008", "#098003", "#C4A000", "#010083", "#D33682", "#0E807F", "#7F7C7F", "#808080", "#EF2929", "#1CFE3C", "#FEFE45", "#268AD2", "#FE13FA", "#29FFFE", "#C2C1C3"]
+
+[[palette]]
+key = "ptyxis_relaxed"
+name = "Relaxed"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#353A44"
+foreground = "#D9D9D9"
+cursor = "#D9D9D9"
+primary = "#6A8799"
+secondary = "#B06698"
+tertiary = "#C9DFFF"
+error = "#BC5653"
+ansi = ["#151515", "#BC5653", "#909D63", "#EBC17A", "#6A8799", "#B06698", "#C9DFFF", "#D9D9D9", "#636363", "#BC5653", "#A0AC77", "#EBC17A", "#7EAAC7", "#B06698", "#ACBBD0", "#F7F7F7"]
+
+[[palette]]
+key = "ptyxis_sea_shells"
+name = "Sea Shells"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#09141B"
+foreground = "#DEB88D"
+cursor = "#DEB88D"
+primary = "#1E4950"
+secondary = "#68D4F1"
+tertiary = "#50A3B5"
+error = "#D15123"
+ansi = ["#17384C", "#D15123", "#027C9B", "#FCA02F", "#1E4950", "#68D4F1", "#50A3B5", "#DEB88D", "#434B53", "#D48678", "#628D98", "#FDD39F", "#1BBCDD", "#BBE3EE", "#87ACB4", "#FEE4CE"]
+
+[[palette]]
+key = "ptyxis_solarized"
+name = "Solarized"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#002B36"
+foreground = "#839496"
+cursor = "#839496"
+primary = "#268BD2"
+secondary = "#D33682"
+tertiary = "#2AA198"
+error = "#DC322F"
+ansi = ["#073642", "#DC322F", "#859900", "#CF9A6B", "#268BD2", "#D33682", "#2AA198", "#EEE8D5", "#657B83", "#D87979", "#88CF76", "#657B83", "#2699FF", "#D33682", "#43B8C3", "#FDF6E3"]
+
+[[palette]]
+key = "ptyxis_spacedust"
+name = "Spacedust"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#0A1E24"
+foreground = "#ECF0C1"
+cursor = "#ECF0C1"
+primary = "#0F548B"
+secondary = "#E35B00"
+tertiary = "#06AFC7"
+error = "#E35B00"
+ansi = ["#6E5346", "#E35B00", "#5CAB96", "#E3CD7B", "#0F548B", "#E35B00", "#06AFC7", "#F0F1CE", "#684C31", "#FF8A3A", "#AECAB8", "#FFC878", "#67A0CE", "#FF8A3A", "#83A7B4", "#FEFFF1"]
+
+[[palette]]
+key = "ptyxis_spring"
+name = "Spring"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#0A1E24"
+foreground = "#ECF0C1"
+cursor = "#ECF0C1"
+primary = "#1DD3EE"
+secondary = "#8959A8"
+tertiary = "#3E999F"
+error = "#FF4D83"
+ansi = ["#000000", "#FF4D83", "#1F8C3B", "#1FC95B", "#1DD3EE", "#8959A8", "#3E999F", "#FFFFFF", "#000000", "#FF0021", "#1FC231", "#D5B807", "#15A9FD", "#8959A8", "#3E999F", "#FFFFFF"]
+
+[[palette]]
+key = "ptyxis_twilight"
+name = "Twilight"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#141414"
+foreground = "#FFFFD4"
+cursor = "#FFFFD4"
+primary = "#44474A"
+secondary = "#B4BE7C"
+tertiary = "#778385"
+error = "#C06D44"
+ansi = ["#141414", "#C06D44", "#AFB97A", "#C2A86C", "#44474A", "#B4BE7C", "#778385", "#FFFFD4", "#262626", "#DE7C4C", "#CCD88C", "#E2C47E", "#5A5E62", "#D0DC8E", "#8A989B", "#FFFFD4"]
+
+[[palette]]
+key = "ptyxis_urple"
+name = "Urple"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#1B1B23"
+foreground = "#877A9B"
+cursor = "#877A9B"
+primary = "#564D9B"
+secondary = "#6C3CA1"
+tertiary = "#808080"
+error = "#B0425B"
+ansi = ["#000000", "#B0425B", "#37A415", "#AD5C42", "#564D9B", "#6C3CA1", "#808080", "#87799C", "#5D3225", "#FF6388", "#29E620", "#F08161", "#867AED", "#A05EEE", "#EAEAEA", "#BFA3FF"]
+
+[[palette]]
+key = "ptyxis_xterm"
+name = "XTerm"
+family = "ptyxis"
+set = "extended"
+dark = true
+background = "#000000"
+foreground = "#ffffff"
+cursor = "#ffffff"
+primary = "#0000ee"
+secondary = "#cd00cd"
+tertiary = "#00cdcd"
+error = "#cd0000"
+ansi = ["#000000", "#cd0000", "#00cd00", "#cdcd00", "#0000ee", "#cd00cd", "#00cdcd", "#e5e5e5", "#7f7f7f", "#ff0000", "#00ff00", "#ffff00", "#5c5cff", "#ff00ff", "#00ffff", "#ffffff"]

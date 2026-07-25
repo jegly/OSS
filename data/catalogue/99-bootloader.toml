@@ -1,0 +1,11 @@
+#  Bootloader password & boot integrity — BUILD_PLAN §4.23.
+
+[section]
+id          = "bootloader"
+title       = "bootloader"
+nav         = "System"
+order       = 99
+syntax      = "special"
+implemented = false
+plan_ref    = "§4.23"
+desc        = "GRUB superuser with password_pbkdf2. Without it every kernel flag in the grub section is one keypress away from being removed by anyone with physical access. Also surfaces Secure Boot state, MOK enrollment, and whether /boot is on an encrypted volume. Forgetting this password means rescue-media recovery, so it confirms twice."

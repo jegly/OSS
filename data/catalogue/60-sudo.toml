@@ -1,0 +1,166 @@
+#  sudo hardening — BUILD_PLAN §4.9
+#
+#  Always validated with `visudo -c -f <tmpfile>` before install. A broken
+#  sudoers file costs you root, so the helper refuses to write one that fails.
+
+[section]
+id      = "sudo"
+title   = "sudo"
+nav     = "Access"
+order   = 60
+syntax  = "sudoers"
+target  = "/etc/sudoers.d/99-hardening-gui"
+desc    = "sudo policy. Validated with visudo -c before it is installed."
+
+[[flag]]
+id      = "sudo_use_pty"
+group   = "sudo / session"
+key     = "use_pty"
+value   = ""
+title   = "Run in a pty"
+desc    = "Commands get their own terminal"
+why     = "Stops a backgrounded process capturing the terminal after sudo exits"
+risk    = "safe"
+
+[[flag]]
+id      = "sudo_logfile"
+group   = "sudo / logging"
+key     = "logfile"
+value   = "\"/var/log/sudo.log\""
+default = "(syslog only)"
+title   = "Dedicated sudo log"
+desc    = "Writes /var/log/sudo.log"
+why     = "A separate file survives journal rotation and is easy to ship off-box"
+risk    = "safe"
+
+[[flag]]
+id      = "sudo_log_input"
+group   = "sudo / logging"
+key     = "log_input"
+value   = ""
+title   = "Log session input"
+desc    = "Records input to sudo'd commands"
+why     = "Lets you reconstruct what was actually run as root after an incident"
+help    = "sudo's own I/O logging (sudoers log_input), written by sudo to /var/log/sudo-io, root-only, never leaving the machine. It covers only commands started through sudo. It does NOT capture sudo's own password prompt — that is read before the command starts. It DOES capture the raw input stream inside an interactive `sudo -i` shell, so a password typed at a nested prompt (an ssh passphrase, `passwd`) is recorded even though the screen shows nothing: echo being off does not protect it. Treat these logs as being as sensitive as the shadow file."
+risk    = "caution"
+breaks  = "Logs grow quickly; records secrets typed at nested prompts"
+
+[[flag]]
+id      = "sudo_log_output"
+group   = "sudo / logging"
+key     = "log_output"
+value   = ""
+title   = "Log session output"
+desc    = "Records what commands printed"
+why     = "Completes the session record"
+help    = "Same mechanism and same storage as session input logging. Anything a root command prints — key material, tokens, file contents — ends up in /var/log/sudo-io verbatim."
+risk    = "caution"
+breaks  = "Large logs; captures command output verbatim"
+
+[[flag]]
+id      = "sudo_timestamp_timeout"
+group   = "sudo / session"
+key     = "timestamp_timeout"
+value   = "0"
+default = "15"
+title   = "Password every time"
+desc    = "No credential caching at all"
+why     = "A cached sudo timestamp is a window for anything running as you"
+risk    = "caution"
+breaks  = "Convenience — every sudo prompts again"
+
+[[flag]]
+id      = "sudo_passwd_tries"
+group   = "sudo / session"
+key     = "passwd_tries"
+value   = "3"
+default = "3"
+title   = "Three password tries"
+desc    = "Then sudo gives up"
+why     = "Limits local password guessing"
+risk    = "safe"
+
+[[flag]]
+id      = "sudo_passwd_timeout"
+group   = "sudo / session"
+key     = "passwd_timeout"
+value   = "1"
+default = "5"
+title   = "One-minute prompt timeout"
+desc    = "Abandoned prompts close"
+why     = "An open password prompt on an unattended screen is an invitation"
+risk    = "safe"
+
+[[flag]]
+id      = "sudo_no_visiblepw"
+group   = "sudo / session"
+key     = "!visiblepw"
+value   = ""
+title   = "Never echo the password"
+desc    = "Refuses to run if echo is on"
+why     = "Blocks the classic tty-less pipeline that would show your password"
+risk    = "safe"
+
+[[flag]]
+id      = "sudo_requiretty"
+group   = "sudo / session"
+key     = "requiretty"
+value   = ""
+title   = "Require a real terminal"
+desc    = "No sudo from scripts or cron"
+why     = "Stops a compromised web app or cron job calling sudo"
+risk    = "caution"
+breaks  = "Automation, cron jobs and CI that use sudo"
+
+[[flag]]
+id      = "sudo_always_set_home"
+group   = "sudo / environment"
+key     = "always_set_home"
+value   = ""
+title   = "Reset HOME"
+desc    = "HOME becomes the target user's"
+why     = "Otherwise root reads config files out of your home directory"
+risk    = "safe"
+
+[[flag]]
+id      = "sudo_env_reset"
+group   = "sudo / environment"
+key     = "env_reset"
+value   = ""
+title   = "Clear the environment"
+desc    = "Only a safe set is passed through"
+why     = "LD_PRELOAD and friends are how you turn sudo into a root shell"
+risk    = "safe"
+
+[[flag]]
+id      = "sudo_secure_path"
+group   = "sudo / environment"
+key     = "secure_path"
+value   = "\"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\""
+default = "(inherited PATH)"
+title   = "Fixed PATH"
+desc    = "root never uses your PATH"
+why     = "A writable directory early in PATH means you choose what root runs"
+risk    = "safe"
+
+[[flag]]
+id      = "sudo_noexec"
+group   = "sudo / environment"
+key     = "noexec"
+value   = ""
+title   = "No shell escapes"
+desc    = "Blocks exec() from sudo'd commands"
+why     = "Stops :!sh in an editor becoming a root shell"
+risk    = "caution"
+breaks  = "Anything legitimately spawning children under sudo (apt, make, dpkg)"
+
+[[flag]]
+id      = "sudo_umask"
+group   = "sudo / environment"
+key     = "umask"
+value   = "0027"
+default = "0022"
+title   = "Tighter umask"
+desc    = "Root-created files aren't world-readable"
+why     = "Files root writes on your behalf shouldn't be readable by everyone"
+risk    = "safe"

@@ -1,0 +1,290 @@
+#  Services & daemons — BUILD_PLAN §4.13
+#
+#  No file: each selected unit is masked or disabled with systemctl. The UI shows
+#  which port each one is listening on (from `ss -ltnup`), so it is obvious what
+#  closes when you turn it off.
+
+[section]
+id      = "services"
+title   = "services"
+nav     = "Monitoring"
+order   = 82
+syntax  = "services"
+desc    = "Turn off daemons you don't use. Masking is stronger than disabling."
+
+[[flag]]
+id      = "svc_avahi_daemon"
+group   = "services / discovery"
+key     = "avahi-daemon.service"
+value   = "mask"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "avahi-daemon"
+desc    = "mDNS/Bonjour discovery — udp/5353"
+why     = "Announces this machine and answers queries from the whole segment"
+risk    = "caution"
+breaks  = ".local name resolution, network printer discovery"
+
+[[flag]]
+id      = "svc_cups"
+group   = "services / discovery"
+key     = "cups.service"
+value   = "disable"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "cups"
+desc    = "Print server — tcp/631"
+why     = "A local print server listening on a socket you never use"
+risk    = "caution"
+breaks  = "All printing"
+
+[[flag]]
+id      = "svc_cups_browsed"
+group   = "services / discovery"
+key     = "cups-browsed.service"
+value   = "mask"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "cups-browsed"
+desc    = "Auto-discovers network printers"
+why     = "Accepted printer adverts from the LAN — the 2024 remote-code-exec path"
+risk    = "safe"
+breaks  = "Automatic network printer setup"
+
+[[flag]]
+id      = "svc_bluetooth"
+group   = "services / radios"
+key     = "bluetooth.service"
+value   = "mask"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "bluetooth"
+desc    = "Bluetooth stack daemon"
+why     = "Radio protocol parsing that anyone in range can reach"
+risk    = "caution"
+breaks  = "All Bluetooth devices"
+
+[[flag]]
+id      = "svc_modemmanager"
+group   = "services / radios"
+key     = "ModemManager.service"
+value   = "mask"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "ModemManager"
+desc    = "Cellular and dial-up modems"
+why     = "Probes serial devices at boot; useless without a WWAN card"
+risk    = "safe"
+breaks  = "Mobile broadband"
+
+[[flag]]
+id      = "svc_wpa_supplicant"
+group   = "services / radios"
+key     = "wpa_supplicant.service"
+value   = "disable"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "wpa_supplicant"
+desc    = "Wi-Fi authentication daemon"
+why     = "Only useful if you use Wi-Fi at all"
+risk    = "breaking"
+breaks  = "ALL Wi-Fi — leave this alone on a laptop"
+
+[[flag]]
+id      = "svc_whoopsie"
+group   = "services / crash reporting"
+key     = "whoopsie.service"
+value   = "mask"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "whoopsie"
+desc    = "Uploads crashes to Canonical"
+why     = "Crash reports carry memory contents off your machine"
+risk    = "safe"
+breaks  = "Automatic crash reporting"
+
+[[flag]]
+id      = "svc_apport"
+group   = "services / crash reporting"
+key     = "apport.service"
+value   = "mask"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "apport"
+desc    = "Collects crash dumps locally"
+why     = "Writes process memory to /var/crash where it sits readable"
+risk    = "safe"
+breaks  = "Ubuntu crash dialogs and bug reporting"
+
+[[flag]]
+id      = "svc_kerneloops"
+group   = "services / crash reporting"
+key     = "kerneloops.service"
+value   = "mask"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "kerneloops"
+desc    = "Submits kernel oopses upstream"
+why     = "Sends kernel state, including addresses, off the machine"
+risk    = "safe"
+
+[[flag]]
+id      = "svc_rpcbind"
+group   = "services / file sharing"
+key     = "rpcbind.service"
+value   = "mask"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "rpcbind"
+desc    = "RPC port mapper — tcp/udp 111"
+why     = "A remotely-enumerable service directory with a long CVE history"
+risk    = "safe"
+breaks  = "NFS and other RPC services"
+
+[[flag]]
+id      = "svc_nfs_server"
+group   = "services / file sharing"
+key     = "nfs-server.service"
+value   = "mask"
+default = "disabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "nfs-server"
+desc    = "NFS export daemon — tcp/2049"
+why     = "Exports filesystems to the network"
+risk    = "safe"
+breaks  = "Serving NFS shares"
+
+[[flag]]
+id      = "svc_rsync"
+group   = "services / file sharing"
+key     = "rsync.service"
+value   = "mask"
+default = "disabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "rsync daemon"
+desc    = "rsyncd — tcp/873"
+why     = "Unauthenticated file access if a module is misconfigured"
+risk    = "safe"
+breaks  = "rsync:// server mode (ssh transport still works)"
+
+[[flag]]
+id      = "svc_smbd"
+group   = "services / file sharing"
+key     = "smbd.service"
+value   = "mask"
+default = "disabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "smbd"
+desc    = "SMB file server — tcp/445"
+why     = "The single most attacked service on any network"
+risk    = "safe"
+breaks  = "Sharing folders with Windows"
+
+[[flag]]
+id      = "svc_nmbd"
+group   = "services / file sharing"
+key     = "nmbd.service"
+value   = "mask"
+default = "disabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "nmbd"
+desc    = "NetBIOS name server — udp/137"
+why     = "Broadcasts and answers NetBIOS names on the LAN"
+risk    = "safe"
+
+[[flag]]
+id      = "svc_snapd"
+group   = "services / desktop plumbing"
+key     = "snapd.service"
+value   = "disable"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "snapd"
+desc    = "Snap package daemon"
+why     = "Large privileged daemon that talks to the network on its own schedule"
+risk    = "breaking"
+breaks  = "ALL snaps — on stock Ubuntu that includes Firefox"
+
+[[flag]]
+id      = "svc_packagekit"
+group   = "services / desktop plumbing"
+key     = "packagekit.service"
+value   = "mask"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "packagekit"
+desc    = "D-Bus package management"
+why     = "Lets desktop apps install packages through a privileged daemon"
+risk    = "caution"
+breaks  = "GNOME Software, automatic update checks"
+
+[[flag]]
+id      = "svc_switcheroo_control"
+group   = "services / desktop plumbing"
+key     = "switcheroo-control.service"
+value   = "mask"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "switcheroo-control"
+desc    = "Dual-GPU switching helper"
+why     = "Unnecessary D-Bus surface on single-GPU machines"
+risk    = "safe"
+breaks  = "'Launch using discrete GPU' menu entries"
+
+[[flag]]
+id      = "svc_power_profiles_daemon"
+group   = "services / desktop plumbing"
+key     = "power-profiles-daemon.service"
+value   = "mask"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "power-profiles-daemon"
+desc    = "Power-mode switching"
+why     = "One less privileged D-Bus service"
+risk    = "safe"
+breaks  = "Power-mode selector in GNOME settings"
+
+[[flag]]
+id      = "svc_gnome_remote_desktop"
+group   = "services / remote access"
+key     = "gnome-remote-desktop.service"
+value   = "mask"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "gnome-remote-desktop"
+desc    = "RDP/VNC screen sharing — tcp/3389"
+why     = "Remote control of your session, enabled by default on 26.04"
+risk    = "safe"
+breaks  = "GNOME screen sharing"
+
+[[flag]]
+id      = "svc_debug_shell"
+group   = "services / remote access"
+key     = "debug-shell.service"
+value   = "mask"
+default = "disabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "debug-shell"
+desc    = "Root shell on tty9, no password"
+why     = "It is exactly what it sounds like — always mask this"
+risk    = "safe"

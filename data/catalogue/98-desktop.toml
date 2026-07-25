@@ -1,0 +1,92 @@
+#  Desktop / login screen — BUILD_PLAN §4.25
+#
+#  Screen lock and the login screen. GDM's own settings live in a keyfile; the
+#  session settings are gsettings and apply to the current user.
+
+[section]
+id      = "desktop"
+title   = "desktop"
+nav     = "Desktop"
+order   = 98
+syntax  = "gsettings"
+desc    = "Screen lock, notification privacy and login-screen exposure."
+
+[[flag]]
+id      = "lock_enabled"
+group   = "desktop / screen lock"
+key     = "org.gnome.desktop.screensaver lock-enabled"
+value   = "true"
+default = "true"
+title   = "Lock on blank"
+desc    = "Screen requires a password again"
+why     = "An unlocked session is every credential you have"
+risk    = "safe"
+
+[[flag]]
+id      = "lock_delay"
+group   = "desktop / screen lock"
+key     = "org.gnome.desktop.screensaver lock-delay"
+value   = "0"
+default = "0"
+title   = "Lock immediately"
+desc    = "No grace period after blanking"
+why     = "A grace period is a window for someone walking past"
+risk    = "safe"
+
+[[flag]]
+id      = "idle_delay"
+group   = "desktop / screen lock"
+key     = "org.gnome.desktop.session idle-delay"
+value   = "300"
+default = "300"
+title   = "Blank after 5 minutes"
+desc    = "Idle timeout before blanking"
+why     = "Bounds how long an unattended screen stays open"
+risk    = "safe"
+
+[[flag]]
+id      = "show_in_lock_screen"
+group   = "desktop / screen lock"
+key     = "org.gnome.desktop.notifications show-in-lock-screen"
+value   = "false"
+default = "true"
+title   = "No notifications on lock screen"
+desc    = "Hides message contents when locked"
+why     = "Lock-screen notifications show 2FA codes and message text to anyone"
+risk    = "safe"
+breaks  = "Glancing at notifications without unlocking"
+
+[[flag]]
+id      = "disable_user_switching"
+group   = "desktop / screen lock"
+key     = "org.gnome.desktop.lockdown disable-user-switching"
+value   = "true"
+default = "false"
+title   = "No user switching"
+desc    = "Removes switch-user from the lock screen"
+why     = "Fewer paths off the lock screen"
+risk    = "safe"
+breaks  = "Multi-user fast switching"
+
+[[flag]]
+id      = "disable_lock_screen"
+group   = "desktop / screen lock"
+key     = "org.gnome.desktop.lockdown disable-lock-screen"
+value   = "false"
+default = "false"
+title   = "Keep locking available"
+desc    = "Don't remove the lock function"
+why     = "This one stays false on purpose — true would stop you locking at all"
+risk    = "safe"
+
+[[flag]]
+id      = "gdm_disable_user_list"
+group   = "desktop / login screen"
+key     = "org.gnome.login-screen disable-user-list"
+value   = "true"
+default = "false"
+title   = "Hide the user list"
+desc    = "Login screen asks for a username"
+why     = "The user list hands out valid account names for free"
+risk    = "safe"
+breaks  = "Click-to-pick login"

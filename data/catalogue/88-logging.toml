@@ -1,0 +1,172 @@
+#  Logging and core dumps — BUILD_PLAN §4.16, §4.17
+#
+#  journald and coredump are separate drop-ins under one sidebar entry. The
+#  core-dump group ties to fs.suid_dumpable and kernel.core_pattern in sysctl.
+
+[section]
+id          = "logging"
+title       = "logging"
+nav         = "Monitoring"
+order       = 88
+syntax      = "ini"
+target      = "/etc/systemd/journald.conf.d/99-hardening-gui.conf"
+ini_section = "Journal"
+reload      = [["/usr/bin/systemctl", "restart", "systemd-journald.service"]]
+desc        = "Journal retention and tamper detection; core-dump suppression."
+
+# --------------------------------------------------------------------------- #
+#  journald
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "journal_storage_persistent"
+group   = "logging / journald"
+key     = "Storage"
+value   = "persistent"
+default = "auto"
+title   = "Keep logs across reboots"
+desc    = "Writes /var/log/journal"
+why     = "Logs that vanish on reboot are useless after an incident"
+risk    = "safe"
+
+[[flag]]
+id      = "journal_compress"
+group   = "logging / journald"
+key     = "Compress"
+value   = "yes"
+default = "yes"
+title   = "Compress the journal"
+desc    = "Smaller on-disk logs"
+why     = "More history fits in the same retention budget"
+risk    = "safe"
+
+[[flag]]
+id      = "journal_seal"
+group   = "logging / journald"
+key     = "Seal"
+value   = "yes"
+default = "yes"
+title   = "Seal the journal (FSS)"
+desc    = "Cryptographic tamper detection"
+why     = "Detects log edits — the first thing an intruder does is clean the logs"
+help    = "Sealing needs a key pair generated with `journalctl --setup-keys`; keep the verification key off the machine or it can be rewritten along with the logs."
+risk    = "safe"
+
+[[flag]]
+id      = "journal_forward_to_syslog"
+group   = "logging / journald"
+key     = "ForwardToSyslog"
+value   = "no"
+default = "no"
+title   = "No syslog forwarding"
+desc    = "One log store, not two"
+why     = "A second plaintext copy is a second thing to protect"
+risk    = "safe"
+
+[[flag]]
+id      = "journal_system_max_use"
+group   = "logging / journald"
+key     = "SystemMaxUse"
+value   = "1G"
+default = "(10% of disk)"
+title   = "Cap journal size"
+desc    = "At most 1 GB of logs"
+why     = "Bounded logs can't fill the disk and take the machine down"
+risk    = "safe"
+
+[[flag]]
+id      = "journal_system_max_file_size"
+group   = "logging / journald"
+key     = "SystemMaxFileSize"
+value   = "128M"
+default = "(1/8 of SystemMaxUse)"
+title   = "Smaller journal files"
+desc    = "128 MB per file"
+why     = "Smaller files rotate sooner, so less is lost to one corruption"
+risk    = "safe"
+
+[[flag]]
+id      = "journal_max_retention"
+group   = "logging / journald"
+key     = "MaxRetentionSec"
+value   = "1month"
+default = "0"
+title   = "One month of history"
+desc    = "Drops entries older than a month"
+why     = "Long enough to investigate, short enough to bound disclosure"
+risk    = "safe"
+
+[[flag]]
+id      = "journal_max_level_store"
+group   = "logging / journald"
+key     = "MaxLevelStore"
+value   = "info"
+default = "debug"
+title   = "Skip debug messages"
+desc    = "Stores info and above"
+why     = "Debug output is where programs leak arguments and paths"
+risk    = "safe"
+
+[[flag]]
+id      = "journal_audit"
+group   = "logging / journald"
+key     = "Audit"
+value   = "yes"
+default = "no"
+title   = "Collect audit messages"
+desc    = "Pulls kernel audit into the journal"
+why     = "Puts audit events in the same timeline as everything else"
+risk    = "safe"
+
+[[flag]]
+id      = "journal_ratelimit_burst"
+group   = "logging / journald"
+key     = "RateLimitBurst"
+value   = "10000"
+default = "10000"
+title   = "Rate-limit burst"
+desc    = "Messages allowed per interval"
+why     = "Stops one chatty service flushing the rest of the log out"
+risk    = "safe"
+
+[[flag]]
+id      = "journal_ratelimit_interval"
+group   = "logging / journald"
+key     = "RateLimitIntervalSec"
+value   = "30s"
+default = "30s"
+title   = "Rate-limit window"
+desc    = "The interval the burst applies to"
+why     = "Pairs with the burst limit"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  core dumps (§4.17)
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id          = "coredump_storage_none"
+group       = "logging / core dumps"
+key         = "Storage"
+value       = "none"
+default     = "external"
+target      = "/etc/systemd/coredump.conf.d/99-hardening-gui.conf"
+ini_section = "Coredump"
+title       = "Store no core dumps"
+desc        = "systemd-coredump keeps nothing"
+why         = "A core dump is process memory — keys, tokens, plaintext — on disk"
+risk        = "safe"
+breaks      = "Post-mortem debugging of crashes"
+
+[[flag]]
+id          = "coredump_process_size_max"
+group       = "logging / core dumps"
+key         = "ProcessSizeMax"
+value       = "0"
+default     = "2G"
+target      = "/etc/systemd/coredump.conf.d/99-hardening-gui.conf"
+ini_section = "Coredump"
+title       = "Refuse to process dumps"
+desc        = "Won't even inspect a core"
+why         = "Belt and braces with Storage=none"
+risk        = "safe"

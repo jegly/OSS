@@ -1,0 +1,393 @@
+#  Password & login policy — BUILD_PLAN §4.8
+#
+#  One sidebar entry, three target files: pwquality.conf.d, faillock.conf and
+#  login.defs (the last is edited in place — it has no drop-in directory).
+
+[section]
+id      = "pam"
+title   = "pam"
+nav     = "Access"
+order   = 55
+syntax  = "keyval"
+target  = "/etc/security/pwquality.conf.d/99-hardening-gui.conf"
+desc    = "Password strength, lockout policy and login defaults."
+
+# --------------------------------------------------------------------------- #
+#  password quality — pwquality.conf.d
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "pw_minlen"
+group   = "pam / password quality"
+key     = "minlen"
+value   = "14"
+default = "8"
+title   = "14-character minimum"
+desc    = "Shorter passwords are rejected"
+why     = "Length beats complexity against offline cracking"
+risk    = "safe"
+
+[[flag]]
+id      = "pw_dcredit"
+group   = "pam / password quality"
+key     = "dcredit"
+value   = "-1"
+default = "0"
+title   = "Require a digit"
+desc    = "At least one number"
+why     = "Widens the character space a cracker must cover"
+risk    = "safe"
+
+[[flag]]
+id      = "pw_ucredit"
+group   = "pam / password quality"
+key     = "ucredit"
+value   = "-1"
+default = "0"
+title   = "Require uppercase"
+desc    = "At least one capital letter"
+why     = "Same reason"
+risk    = "safe"
+
+[[flag]]
+id      = "pw_lcredit"
+group   = "pam / password quality"
+key     = "lcredit"
+value   = "-1"
+default = "0"
+title   = "Require lowercase"
+desc    = "At least one small letter"
+why     = "Same reason"
+risk    = "safe"
+
+[[flag]]
+id      = "pw_ocredit"
+group   = "pam / password quality"
+key     = "ocredit"
+value   = "-1"
+default = "0"
+title   = "Require a symbol"
+desc    = "At least one special character"
+why     = "Same reason"
+risk    = "safe"
+
+[[flag]]
+id      = "pw_minclass"
+group   = "pam / password quality"
+key     = "minclass"
+value   = "4"
+default = "0"
+title   = "All four classes"
+desc    = "Upper, lower, digit and symbol"
+why     = "Stops the single-class password that satisfies length alone"
+risk    = "caution"
+
+[[flag]]
+id      = "pw_maxrepeat"
+group   = "pam / password quality"
+key     = "maxrepeat"
+value   = "3"
+default = "0"
+title   = "No long runs"
+desc    = "Rejects aaaa and 1111"
+why     = "Repeats add length without adding entropy"
+risk    = "safe"
+
+[[flag]]
+id      = "pw_maxsequence"
+group   = "pam / password quality"
+key     = "maxsequence"
+value   = "3"
+default = "0"
+title   = "No long sequences"
+desc    = "Rejects abcd and 1234"
+why     = "Sequences are the first thing a wordlist tries"
+risk    = "safe"
+
+[[flag]]
+id      = "pw_dictcheck"
+group   = "pam / password quality"
+key     = "dictcheck"
+value   = "1"
+default = "1"
+title   = "Dictionary check"
+desc    = "Rejects known words"
+why     = "A dictionary word is a dictionary attack away"
+risk    = "safe"
+
+[[flag]]
+id      = "pw_usercheck"
+group   = "pam / password quality"
+key     = "usercheck"
+value   = "1"
+default = "1"
+title   = "Not your username"
+desc    = "Rejects passwords containing the name"
+why     = "The first guess anyone makes"
+risk    = "safe"
+
+[[flag]]
+id      = "pw_enforcing"
+group   = "pam / password quality"
+key     = "enforcing"
+value   = "1"
+default = "1"
+title   = "Actually enforce"
+desc    = "Rejects instead of warning"
+why     = "Without this the rules above are advice"
+risk    = "caution"
+
+[[flag]]
+id      = "pw_retry"
+group   = "pam / password quality"
+key     = "retry"
+value   = "3"
+default = "3"
+title   = "Three attempts"
+desc    = "Prompts on rejection, then gives up"
+why     = "Bounds the interactive guessing loop"
+risk    = "safe"
+
+[[flag]]
+id      = "pw_difok"
+group   = "pam / password quality"
+key     = "difok"
+value   = "5"
+default = "1"
+title   = "Five new characters"
+desc    = "Must differ from the old password"
+why     = "Stops password1 becoming password2"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  lockout — faillock.conf
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "faillock_deny"
+group   = "pam / lockout"
+key     = "deny"
+value   = "5"
+default = "3"
+target  = "/etc/security/faillock.conf"
+in_place = true
+title   = "Lock after 5 failures"
+desc    = "Account locks on repeated failure"
+why     = "Turns online password guessing into a denial of service against itself"
+help    = "The app sanity-checks that you are not about to lock out the account you are currently using."
+risk    = "caution"
+breaks  = "Lock-out risk if you mistype repeatedly"
+
+[[flag]]
+id      = "faillock_unlock_time"
+group   = "pam / lockout"
+key     = "unlock_time"
+value   = "900"
+default = "600"
+target  = "/etc/security/faillock.conf"
+in_place = true
+title   = "15-minute lockout"
+desc    = "Unlocks itself after 15 minutes"
+why     = "Long enough to kill a guessing run, short enough to survive a typo"
+risk    = "caution"
+
+[[flag]]
+id      = "faillock_fail_interval"
+group   = "pam / lockout"
+key     = "fail_interval"
+value   = "900"
+default = "900"
+target  = "/etc/security/faillock.conf"
+in_place = true
+title   = "15-minute failure window"
+desc    = "Failures counted within 15 minutes"
+why     = "Stops the counter accumulating across weeks of normal typos"
+risk    = "safe"
+
+[[flag]]
+id      = "faillock_even_deny_root"
+group   = "pam / lockout"
+key     = "even_deny_root"
+value   = ""
+target  = "/etc/security/faillock.conf"
+in_place = true
+title   = "Lock root too"
+desc    = "root is not exempt"
+why     = "root is the account worth guessing"
+risk    = "breaking"
+breaks  = "Can lock out root — keep a recovery path"
+
+[[flag]]
+id      = "faillock_root_unlock_time"
+group   = "pam / lockout"
+key     = "root_unlock_time"
+value   = "60"
+default = "600"
+target  = "/etc/security/faillock.conf"
+in_place = true
+title   = "Root unlocks in a minute"
+desc    = "Shorter lockout for root"
+why     = "Keeps a locked root from becoming an unrecoverable machine"
+risk    = "safe"
+
+[[flag]]
+id      = "faillock_audit"
+group   = "pam / lockout"
+key     = "audit"
+value   = ""
+target  = "/etc/security/faillock.conf"
+in_place = true
+title   = "Log the attempted user"
+desc    = "Records unknown usernames too"
+why     = "The username tried is the useful part of a failed login"
+risk    = "safe"
+
+[[flag]]
+id      = "faillock_silent"
+group   = "pam / lockout"
+key     = "silent"
+value   = ""
+target  = "/etc/security/faillock.conf"
+in_place = true
+title   = "Don't say it's locked"
+desc    = "No lockout message to the user"
+why     = "Silence denies an attacker feedback about which accounts exist"
+risk    = "caution"
+breaks  = "Confusing for legitimate users who get locked out"
+
+# --------------------------------------------------------------------------- #
+#  login defaults — /etc/login.defs  (in-place edit, backed up)
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "logindefs_pass_max_days"
+group   = "pam / login defaults"
+key     = "PASS_MAX_DAYS"
+value   = "365"
+default = "99999"
+target  = "/etc/login.defs"
+syntax  = "logindefs"
+title   = "Yearly password expiry"
+desc    = "Passwords expire after a year"
+why     = "Bounds how long a leaked credential stays useful"
+risk    = "caution"
+breaks  = "Forced password change once a year"
+
+[[flag]]
+id      = "logindefs_pass_min_days"
+group   = "pam / login defaults"
+key     = "PASS_MIN_DAYS"
+value   = "1"
+default = "0"
+target  = "/etc/login.defs"
+syntax  = "logindefs"
+title   = "One change per day"
+desc    = "Can't change twice in a day"
+why     = "Stops cycling straight back to the old password"
+risk    = "safe"
+
+[[flag]]
+id      = "logindefs_pass_warn_age"
+group   = "pam / login defaults"
+key     = "PASS_WARN_AGE"
+value   = "14"
+default = "7"
+target  = "/etc/login.defs"
+syntax  = "logindefs"
+title   = "Two weeks' warning"
+desc    = "Warns before expiry"
+why     = "An expiry nobody saw coming is an expiry that locks someone out"
+risk    = "safe"
+
+[[flag]]
+id      = "logindefs_umask"
+group   = "pam / login defaults"
+key     = "UMASK"
+value   = "077"
+default = "022"
+target  = "/etc/login.defs"
+syntax  = "logindefs"
+title   = "Private by default"
+desc    = "New files are owner-only"
+why     = "022 makes every file you create world-readable"
+risk    = "caution"
+breaks  = "Shared directories and group-collaboration workflows"
+
+[[flag]]
+id      = "logindefs_sha_crypt_min_rounds"
+group   = "pam / login defaults"
+key     = "SHA_CRYPT_MIN_ROUNDS"
+value   = "640000"
+default = "5000"
+target  = "/etc/login.defs"
+syntax  = "logindefs"
+title   = "Expensive hashing"
+desc    = "640k rounds for SHA-crypt"
+why     = "Each round multiplies the cost of an offline crack"
+risk    = "safe"
+
+[[flag]]
+id      = "logindefs_encrypt_method"
+group   = "pam / login defaults"
+key     = "ENCRYPT_METHOD"
+value   = "YESCRYPT"
+default = "YESCRYPT"
+target  = "/etc/login.defs"
+syntax  = "logindefs"
+title   = "yescrypt hashing"
+desc    = "Memory-hard password hashes"
+why     = "Memory-hard hashing is what makes GPU cracking uneconomic"
+risk    = "safe"
+
+[[flag]]
+id      = "logindefs_login_retries"
+group   = "pam / login defaults"
+key     = "LOGIN_RETRIES"
+value   = "3"
+default = "5"
+target  = "/etc/login.defs"
+syntax  = "logindefs"
+title   = "Three console tries"
+desc    = "Login gives up after 3"
+why     = "Same logic as MaxAuthTries, for local consoles"
+risk    = "safe"
+
+[[flag]]
+id      = "logindefs_login_timeout"
+group   = "pam / login defaults"
+key     = "LOGIN_TIMEOUT"
+value   = "60"
+default = "60"
+target  = "/etc/login.defs"
+syntax  = "logindefs"
+title   = "One-minute login timeout"
+desc    = "Abandoned prompts close"
+why     = "An idle login prompt holds a tty open"
+risk    = "safe"
+
+[[flag]]
+id      = "logindefs_default_home"
+group   = "pam / login defaults"
+key     = "DEFAULT_HOME"
+value   = "no"
+default = "yes"
+target  = "/etc/login.defs"
+syntax  = "logindefs"
+title   = "No login without a home"
+desc    = "Refuses to fall back to /"
+why     = "A session rooted at / writes dotfiles into the filesystem root"
+risk    = "safe"
+
+[[flag]]
+id      = "logindefs_usergroups_enab"
+group   = "pam / login defaults"
+key     = "USERGROUPS_ENAB"
+value   = "no"
+default = "yes"
+target  = "/etc/login.defs"
+syntax  = "logindefs"
+title   = "No per-user groups"
+desc    = "Stops umask being relaxed for groups"
+why     = "With user-private groups, tools quietly widen your umask to 002"
+risk    = "caution"
+breaks  = "Group-write workflows that rely on per-user groups"

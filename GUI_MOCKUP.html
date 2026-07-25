@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hardening Control Center — GUI mockup (reference for build)</title>
+<style>
+  body { background:#111114; margin:0; padding:24px; font-family: system-ui, sans-serif; font-size:12px; color:#d6d6da; }
+  .mono { font-family: ui-monospace, monospace; font-size:10px; color:#6d6d76; }
+  .note { max-width:760px; margin:0 auto 16px; color:#9a9aa2; line-height:1.5; }
+</style>
+</head>
+<body>
+
+<p class="note">
+Reference mockup for the main window (BUILD_PLAN.md §7). Design language: dark libadwaita.
+Key elements — header: preset picker ("Stock (modified)" = preset loaded then tweaked), search,
+changed-counter. Sidebar: sections grouped System/Network/Access with per-section badges
+(count = staged changes, amber ◐ = pending reboot, red ◍ = drift). Filter chips. Cards:
+toggle · title · desc one-liner · mono key · risk badge (amber border = caution, red border =
+one-way) · status dot top-right (green applied / amber pending reboot / red differs).
+Non-boolean flags (values array in the TOML) swap the toggle for a compact dropdown — see
+"Ptrace scope". Footer: "asks for password" lock hint, reboot notice, Review + Apply.
+</p>
+
+<div style="max-width:760px; margin:0 auto; background:#1c1c20; border:1px solid #34343a; border-radius:12px; overflow:hidden;">
+
+  <div style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:#242428; border-bottom:1px solid #34343a;">
+    <span style="font-size:15px;">&#128737;</span>
+    <span style="font-size:14px; font-weight:500; color:#f0f0f2;">Hardening settings</span>
+    <span style="display:flex; align-items:center; gap:6px; background:#2f2f35; border:1px solid #45454c; border-radius:6px; padding:4px 10px; margin-left:10px;">
+      <span style="color:#f0f0f2;">Stock (modified)</span>
+      <span style="color:#9a9aa2;">&#9662;</span>
+    </span>
+    <span style="display:flex; align-items:center; gap:6px; background:#2f2f35; border:1px solid #45454c; border-radius:6px; padding:4px 10px; color:#9a9aa2; flex:1; max-width:150px;">&#128269; Search flags</span>
+    <span style="margin-left:auto; color:#8ab4f8; font-weight:500;">12 changed</span>
+    <span style="color:#9a9aa2;">&#9776;</span>
+  </div>
+
+  <div style="display:flex;">
+    <div style="width:148px; flex:none; background:#202024; border-right:1px solid #34343a; padding:8px 6px;">
+      <div style="padding:6px 8px; border-radius:6px; color:#d6d6da;">&#9638; Overview</div>
+      <div style="padding:8px 8px 3px; font-size:10px; letter-spacing:0.5px; color:#77777f;">SYSTEM</div>
+      <div style="display:flex; padding:6px 8px; border-radius:6px; background:#39395c; color:#f0f0f2;">sysctl.d<span style="margin-left:auto; background:#4a4a72; border-radius:8px; padding:0 6px; font-size:10px;">7</span></div>
+      <div style="display:flex; padding:6px 8px; color:#a8a8b0;">grub<span style="margin-left:auto; color:#e8b055; font-size:10px;">&#9684; 3</span></div>
+      <div style="display:flex; padding:6px 8px; color:#a8a8b0;">modprobe.d<span style="margin-left:auto; background:#3a3a40; border-radius:8px; padding:0 6px; font-size:10px;">2</span></div>
+      <div style="padding:8px 8px 3px; font-size:10px; letter-spacing:0.5px; color:#77777f;">NETWORK</div>
+      <div style="padding:6px 8px; color:#a8a8b0;">ufw</div>
+      <div style="display:flex; padding:6px 8px; color:#a8a8b0;">ssh<span style="margin-left:auto; color:#e06c6c; font-size:10px;">&#9685; 1</span></div>
+      <div style="padding:6px 8px; color:#a8a8b0;">dns</div>
+      <div style="padding:8px 8px 3px; font-size:10px; letter-spacing:0.5px; color:#77777f;">ACCESS</div>
+      <div style="padding:6px 8px; color:#a8a8b0;">permissions</div>
+      <div style="padding:6px 8px; color:#a8a8b0;">usb</div>
+      <div style="padding:6px 8px; color:#77777f; font-size:10px;">+ 12 more sections</div>
+    </div>
+
+    <div style="flex:1; min-width:0; padding:10px 12px; background:#1c1c20;">
+      <div style="display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap;">
+        <span style="background:#39395c; color:#c8c8f0; border-radius:10px; padding:2px 9px; font-size:10px;">changed</span>
+        <span style="background:#2a2a2f; color:#9a9aa2; border-radius:10px; padding:2px 9px; font-size:10px;">drift</span>
+        <span style="background:#2a2a2f; color:#9a9aa2; border-radius:10px; padding:2px 9px; font-size:10px;">needs reboot</span>
+        <span style="background:#2a2a2f; color:#9a9aa2; border-radius:10px; padding:2px 9px; font-size:10px;">one-way</span>
+        <span style="background:#2a2a2f; color:#9a9aa2; border-radius:10px; padding:2px 9px; font-size:10px;">hide risky</span>
+      </div>
+
+      <div style="display:flex; align-items:baseline; margin-bottom:8px;">
+        <span style="font-size:11px; color:#9a9aa2;">kernel / memory</span>
+        <span style="margin-left:auto; font-size:11px; color:#8ab4f8;">select all (33)</span>
+      </div>
+
+      <div style="display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px;">
+
+        <div style="background:#26262b; border:1px solid #3a3a40; border-radius:8px; padding:9px 10px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="width:26px; height:15px; border-radius:8px; background:#7b7bd6; position:relative; flex:none;"><span style="position:absolute; right:2px; top:2px; width:11px; height:11px; border-radius:50%; background:#fff;"></span></span>
+            <span style="font-weight:500; color:#f0f0f2;">Restrict kernel pointers</span>
+            <span title="applied" style="margin-left:auto; width:7px; height:7px; border-radius:50%; background:#5dca7d;"></span>
+          </div>
+          <div style="color:#9a9aa2; margin:4px 0 2px;">Hides kernel addresses in /proc</div>
+          <div class="mono">kptr_restrict = 2</div>
+        </div>
+
+        <div style="background:#26262b; border:1px solid #3a3a40; border-radius:8px; padding:9px 10px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="width:26px; height:15px; border-radius:8px; background:#7b7bd6; position:relative; flex:none;"><span style="position:absolute; right:2px; top:2px; width:11px; height:11px; border-radius:50%; background:#fff;"></span></span>
+            <span style="font-weight:500; color:#f0f0f2;">Restrict dmesg</span>
+            <span title="applied" style="margin-left:auto; width:7px; height:7px; border-radius:50%; background:#5dca7d;"></span>
+          </div>
+          <div style="color:#9a9aa2; margin:4px 0 2px;">Only root reads kernel log</div>
+          <div class="mono">dmesg_restrict = 1</div>
+        </div>
+
+        <div style="background:#26262b; border:1px solid #3a3a40; border-radius:8px; padding:9px 10px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-weight:500; color:#f0f0f2;">Ptrace scope</span>
+            <span title="pending reboot" style="margin-left:auto; width:7px; height:7px; border-radius:50%; background:#e8b055;"></span>
+          </div>
+          <div style="margin:5px 0 2px;">
+            <span style="background:#2f2f35; border:1px solid #45454c; border-radius:5px; padding:2px 8px; color:#f0f0f2;">admin only (2) &#9662;</span>
+          </div>
+          <div class="mono">yama.ptrace_scope = 2</div>
+        </div>
+
+        <div style="background:#26262b; border:1px solid #7a3d3d; border-radius:8px; padding:9px 10px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="width:26px; height:15px; border-radius:8px; background:#4a4a52; position:relative; flex:none;"><span style="position:absolute; left:2px; top:2px; width:11px; height:11px; border-radius:50%; background:#9a9aa2;"></span></span>
+            <span style="font-weight:500; color:#f0f0f2;">Disable kexec</span>
+            <span style="background:#5c2e2e; color:#f0a0a0; border-radius:4px; padding:1px 6px; font-size:9px;">one-way</span>
+          </div>
+          <div style="color:#9a9aa2; margin:4px 0 2px;">Stops loading a new kernel</div>
+          <div class="mono">kexec_load_disabled = 1</div>
+        </div>
+
+        <div style="background:#26262b; border:1px solid #8a6a35; border-radius:8px; padding:9px 10px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="width:26px; height:15px; border-radius:8px; background:#4a4a52; position:relative; flex:none;"><span style="position:absolute; left:2px; top:2px; width:11px; height:11px; border-radius:50%; background:#9a9aa2;"></span></span>
+            <span style="font-weight:500; color:#f0f0f2;">Block unprivileged BPF</span>
+            <span style="background:#5c4a24; color:#f0d08a; border-radius:4px; padding:1px 6px; font-size:9px;">caution</span>
+          </div>
+          <div style="color:#9a9aa2; margin:4px 0 2px;">Breaks some eBPF tooling</div>
+          <div class="mono">unprivileged_bpf_disabled = 1</div>
+        </div>
+
+        <div style="background:#26262b; border:1px solid #3a3a40; border-radius:8px; padding:9px 10px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="width:26px; height:15px; border-radius:8px; background:#7b7bd6; position:relative; flex:none;"><span style="position:absolute; right:2px; top:2px; width:11px; height:11px; border-radius:50%; background:#fff;"></span></span>
+            <span style="font-weight:500; color:#f0f0f2;">Protect symlinks</span>
+            <span title="differs" style="margin-left:auto; width:7px; height:7px; border-radius:50%; background:#e06c6c;"></span>
+          </div>
+          <div style="color:#9a9aa2; margin:4px 0 2px;">Blocks /tmp symlink attacks</div>
+          <div class="mono">fs.protected_symlinks = 1</div>
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:5px; margin-top:10px; color:#8ab4f8; font-size:11px; flex-wrap:wrap;">
+        <span>namespaces / apparmor</span><span style="color:#55555e;">&#183;</span><span>network</span><span style="color:#55555e;">&#183;</span><span style="color:#77777f;">19 more in this section</span>
+        <span style="margin-left:auto; color:#5dca7d;">&#9679; applied</span>
+        <span style="color:#e8b055;">&#9684; reboot</span>
+        <span style="color:#e06c6c;">&#9685; drift</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; align-items:center; gap:8px; padding:9px 14px; background:#242428; border-top:1px solid #34343a;">
+    <span style="color:#77777f;">&#128274; asks for password</span>
+    <span style="color:#e8b055; font-size:11px; margin-left:10px;">&#9684; 3 changes take effect after reboot</span>
+    <span style="margin-left:auto; background:#2f2f35; border:1px solid #45454c; border-radius:6px; padding:5px 14px; color:#f0f0f2;">Review</span>
+    <span style="background:#7b7bd6; border-radius:6px; padding:5px 14px; color:#fff; font-weight:500;">Apply</span>
+  </div>
+</div>
+
+</body>
+</html>

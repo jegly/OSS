@@ -1,0 +1,11 @@
+#  AppArmor — BUILD_PLAN §4.15.
+
+[section]
+id          = "apparmor"
+title       = "apparmor"
+nav         = "Monitoring"
+order       = 86
+syntax      = "special"
+implemented = false
+plan_ref    = "§4.15"
+desc        = "Per-profile enforce/complain toggles, enabling the profiles shipped disabled in /etc/apparmor.d/disable/, and the aa-unconfined view of processes holding listening sockets with no profile."

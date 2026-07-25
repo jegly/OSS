@@ -1,0 +1,408 @@
+#  SSH — BUILD_PLAN §4.7
+#
+#  The helper runs `sshd -t` against the candidate config and refuses to install
+#  it if that fails, checks an authorised key exists before killing password auth,
+#  and warns when $SSH_CONNECTION is set.
+
+[section]
+id           = "ssh"
+title        = "ssh"
+nav          = "Network"
+order        = 50
+syntax       = "sshd"
+target       = "/etc/ssh/sshd_config.d/99-hardening-gui.conf"
+reload       = [["/usr/bin/systemctl", "try-reload-or-restart", "ssh.service"]]
+requires_pkg = "openssh-server"
+desc         = "Server-side SSH policy. Validated with sshd -t before it is installed."
+
+# --------------------------------------------------------------------------- #
+#  authentication
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "ssh_permit_root_login"
+group   = "ssh / authentication"
+key     = "PermitRootLogin"
+value   = "no"
+default = "prohibit-password"
+title   = "No root login"
+desc    = "root can't log in over SSH"
+why     = "Removes the one account name every attacker already knows"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_password_authentication"
+group   = "ssh / authentication"
+key     = "PasswordAuthentication"
+value   = "no"
+default = "yes"
+title   = "Keys only"
+desc    = "Turns off password logins"
+why     = "Passwords can be brute-forced; keys cannot"
+help    = "The app refuses to apply this unless at least one authorised key already exists for a user who is still allowed to log in."
+risk    = "caution"
+breaks  = "Password logins — lock-out risk if you have no key"
+
+[[flag]]
+id      = "ssh_permit_empty_passwords"
+group   = "ssh / authentication"
+key     = "PermitEmptyPasswords"
+value   = "no"
+default = "no"
+title   = "No empty passwords"
+desc    = "Refuses accounts with no password"
+why     = "An empty password is an open door"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_kbd_interactive"
+group   = "ssh / authentication"
+key     = "KbdInteractiveAuthentication"
+value   = "no"
+default = "yes"
+title   = "No keyboard-interactive"
+desc    = "Closes the PAM password path"
+why     = "Otherwise password auth sneaks back in through PAM"
+risk    = "caution"
+breaks  = "2FA prompts that use keyboard-interactive"
+
+[[flag]]
+id      = "ssh_challenge_response"
+group   = "ssh / authentication"
+key     = "ChallengeResponseAuthentication"
+value   = "no"
+default = "no"
+title   = "No challenge-response"
+desc    = "Legacy alias of the above"
+why     = "Older sshd builds read this name instead"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_pubkey_authentication"
+group   = "ssh / authentication"
+key     = "PubkeyAuthentication"
+value   = "yes"
+default = "yes"
+title   = "Public-key auth on"
+desc    = "The mechanism you keep"
+why     = "Must stay on if you are turning passwords off"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_authentication_methods"
+group   = "ssh / authentication"
+key     = "AuthenticationMethods"
+value   = "publickey"
+default = "any"
+title   = "Require public key"
+desc    = "Only one method is acceptable"
+why     = "States the policy explicitly instead of relying on defaults"
+risk    = "caution"
+breaks  = "Any other auth method, including 2FA combinations"
+
+[[flag]]
+id      = "ssh_hostbased_authentication"
+group   = "ssh / authentication"
+key     = "HostbasedAuthentication"
+value   = "no"
+default = "no"
+title   = "No host-based auth"
+desc    = "Trusting a hostname isn't auth"
+why     = "Host-based trust is spoofable and transitive"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_ignore_rhosts"
+group   = "ssh / authentication"
+key     = "IgnoreRhosts"
+value   = "yes"
+default = "yes"
+title   = "Ignore .rhosts"
+desc    = "Users can't grant trust themselves"
+why     = "A user-writable file should never confer login rights"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_use_pam"
+group   = "ssh / authentication"
+key     = "UsePAM"
+value   = "yes"
+default = "yes"
+title   = "Use PAM"
+desc    = "Keeps account and session checks"
+why     = "PAM is what enforces faillock, expiry and session limits"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_strict_modes"
+group   = "ssh / authentication"
+key     = "StrictModes"
+value   = "yes"
+default = "yes"
+title   = "Check key file modes"
+desc    = "Refuses group-writable key files"
+why     = "A group-writable authorized_keys is anyone's authorized_keys"
+risk    = "safe"
+
+[[flag]]
+id       = "ssh_allow_users"
+group    = "ssh / authentication"
+key      = "AllowUsers"
+value    = ""
+default  = ""
+editable = true
+pattern  = "[a-z_][a-z0-9_-]{0,31}( [a-z_][a-z0-9_-]{0,31})*"
+title    = "Allowed users"
+desc    = "Explicit login allowlist"
+why     = "Turns login from opt-out into opt-in"
+help    = "Set the user list in the section header before enabling. Applying this with the wrong list is the fastest way to lock yourself out."
+risk    = "caution"
+breaks  = "Login for every account not on the list"
+
+# --------------------------------------------------------------------------- #
+#  limits
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "ssh_max_auth_tries"
+group   = "ssh / limits"
+key     = "MaxAuthTries"
+value   = "3"
+default = "6"
+title   = "Three auth attempts"
+desc    = "Disconnects after 3 failures"
+why     = "Slows credential guessing to a crawl"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_max_sessions"
+group   = "ssh / limits"
+key     = "MaxSessions"
+value   = "2"
+default = "10"
+title   = "Two sessions per connection"
+desc    = "Limits multiplexed channels"
+why     = "Bounds what one hijacked connection can open"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_max_startups"
+group   = "ssh / limits"
+key     = "MaxStartups"
+value   = "10:30:60"
+default = "10:30:100"
+title   = "Throttle new connections"
+desc    = "Random early drop when flooded"
+why     = "Keeps a connection flood from exhausting sshd"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_login_grace_time"
+group   = "ssh / limits"
+key     = "LoginGraceTime"
+value   = "30"
+default = "120"
+title   = "30-second login window"
+desc    = "Unauthenticated sockets die fast"
+why     = "Shrinks the pre-auth attack window — where the worst CVEs live"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_client_alive_interval"
+group   = "ssh / limits"
+key     = "ClientAliveInterval"
+value   = "300"
+default = "0"
+title   = "Idle timeout probe"
+desc    = "Checks the client every 5 minutes"
+why     = "Abandoned sessions are unattended root shells"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_client_alive_count_max"
+group   = "ssh / limits"
+key     = "ClientAliveCountMax"
+value   = "2"
+default = "3"
+title   = "Drop after 2 misses"
+desc    = "Ends the session ~10 minutes idle"
+why     = "Completes the idle-session timeout"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  forwarding
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "ssh_x11_forwarding"
+group   = "ssh / forwarding"
+key     = "X11Forwarding"
+value   = "no"
+default = "yes"
+title   = "No X11 forwarding"
+desc    = "Remote apps can't draw locally"
+why     = "X11 forwarding gives the remote host your keystrokes"
+risk    = "safe"
+breaks  = "Running remote GUI apps over SSH"
+
+[[flag]]
+id      = "ssh_allow_agent_forwarding"
+group   = "ssh / forwarding"
+key     = "AllowAgentForwarding"
+value   = "no"
+default = "yes"
+title   = "No agent forwarding"
+desc    = "Your keys stay on your machine"
+why     = "Root on the remote host can use your forwarded agent to log in anywhere"
+risk    = "safe"
+breaks  = "Chained SSH hops using your local keys"
+
+[[flag]]
+id      = "ssh_allow_tcp_forwarding"
+group   = "ssh / forwarding"
+key     = "AllowTcpForwarding"
+value   = "no"
+default = "yes"
+title   = "No TCP forwarding"
+desc    = "No tunnels through this host"
+why     = "Port forwarding turns sshd into a pivot into your network"
+risk    = "caution"
+breaks  = "ssh -L / -D tunnels and SOCKS proxying"
+
+[[flag]]
+id      = "ssh_permit_tunnel"
+group   = "ssh / forwarding"
+key     = "PermitTunnel"
+value   = "no"
+default = "no"
+title   = "No tun device tunnels"
+desc    = "No layer-3 VPN over SSH"
+why     = "A tun tunnel bridges networks straight through the host"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_gateway_ports"
+group   = "ssh / forwarding"
+key     = "GatewayPorts"
+value   = "no"
+default = "no"
+title   = "Forwards stay local"
+desc    = "Remote forwards bind loopback only"
+why     = "Otherwise a forwarded port is exposed to the whole network"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_permit_user_environment"
+group   = "ssh / forwarding"
+key     = "PermitUserEnvironment"
+value   = "no"
+default = "no"
+title   = "Ignore user environment"
+desc    = "No ~/.ssh/environment"
+why     = "LD_PRELOAD in a user file is a privilege-escalation primitive"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_compression"
+group   = "ssh / forwarding"
+key     = "Compression"
+value   = "no"
+default = "yes"
+title   = "No compression"
+desc    = "Removes pre-auth zlib parsing"
+why     = "Compression before auth has a bad CVE history, and leaks length info"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  crypto
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "ssh_kex_algorithms"
+group   = "ssh / crypto"
+key     = "KexAlgorithms"
+value   = "curve25519-sha256"
+default = "(openssh default set)"
+title   = "Modern key exchange only"
+desc    = "curve25519 and nothing else"
+why     = "Drops DH group exchange and every NIST-curve fallback"
+risk    = "caution"
+breaks  = "Old clients that don't speak curve25519"
+
+[[flag]]
+id      = "ssh_ciphers"
+group   = "ssh / crypto"
+key     = "Ciphers"
+value   = "chacha20-poly1305@openssh.com,aes256-gcm@openssh.com"
+default = "(openssh default set)"
+title   = "AEAD ciphers only"
+desc    = "ChaCha20 and AES-256-GCM"
+why     = "Only authenticated-encryption modes, no CBC"
+risk    = "caution"
+breaks  = "Old clients without AEAD support"
+
+[[flag]]
+id      = "ssh_macs"
+group   = "ssh / crypto"
+key     = "MACs"
+value   = "hmac-sha2-512-etm@openssh.com"
+default = "(openssh default set)"
+title   = "Encrypt-then-MAC only"
+desc    = "One strong ETM algorithm"
+why     = "Encrypt-then-MAC avoids the whole MAC-then-encrypt bug class"
+risk    = "caution"
+breaks  = "Old clients without ETM MACs"
+
+[[flag]]
+id      = "ssh_host_key_algorithms"
+group   = "ssh / crypto"
+key     = "HostKeyAlgorithms"
+value   = "ssh-ed25519"
+default = "(openssh default set)"
+title   = "Ed25519 host keys only"
+desc    = "No RSA or ECDSA host keys"
+why     = "One modern algorithm, no downgrade path"
+help    = "Requires an ed25519 host key to exist — every stock Ubuntu install has one."
+risk    = "caution"
+breaks  = "Clients pinned to your old RSA host key (they see a key-change warning)"
+
+# --------------------------------------------------------------------------- #
+#  logging & exposure
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "ssh_log_level"
+group   = "ssh / logging"
+key     = "LogLevel"
+value   = "VERBOSE"
+default = "INFO"
+title   = "Verbose logging"
+desc    = "Logs the key fingerprint used"
+why     = "Without VERBOSE you can't tell which key logged in"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_banner"
+group   = "ssh / logging"
+key     = "Banner"
+value   = "/etc/issue.net"
+default = "none"
+title   = "Pre-login banner"
+desc    = "Shows /etc/issue.net before auth"
+why     = "Required by most compliance regimes; states there is no implied access"
+risk    = "safe"
+
+[[flag]]
+id       = "ssh_port"
+group    = "ssh / logging"
+key      = "Port"
+value    = "22"
+default  = "22"
+editable = true
+pattern  = "[1-9][0-9]{0,4}"
+title    = "Listening port"
+desc    = "Move off 22 to cut log noise"
+why     = "Not security by itself, but it removes almost all drive-by scanning"
+help    = "Change the value here, then remember to allow the new port in the firewall — the app cross-checks that at review time."
+risk    = "caution"
+breaks  = "Clients still connecting to the old port"

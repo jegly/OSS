@@ -1,0 +1,114 @@
+# Dracula: dark and light bases x 7 accents.
+#
+# Light accents are the darker adaptations, for legibility on a light background.
+
+[family]
+key = "dracula"
+name = "Dracula"
+
+[[base]]
+key = "dark"
+name = "Dracula"
+dark = true
+text = "#f8f8f2"
+subtext1 = "#b8bac8"
+overlay1 = "#7b8db0"
+overlay0 = "#6272a4"
+surface2 = "#565761"
+surface1 = "#44475a"
+surface0 = "#383a48"
+base = "#282a36"
+mantle = "#21222c"
+crust = "#191a21"
+
+[[base]]
+key = "light"
+name = "Dracula Light"
+dark = false
+text = "#282a36"
+subtext1 = "#414559"
+overlay1 = "#6272a4"
+overlay0 = "#7b8db0"
+surface2 = "#d6d8e7"
+surface1 = "#e2e3ed"
+surface0 = "#ecedfa"
+base = "#f8f8f2"
+mantle = "#f0f0f9"
+crust = "#e8e8f5"
+
+[[accent]]
+key = "purple"
+name = "Purple"
+dark = "#bd93f9"
+light = "#7b4fef"
+
+[[accent]]
+key = "pink"
+name = "Pink"
+dark = "#ff79c6"
+light = "#d9337a"
+
+[[accent]]
+key = "cyan"
+name = "Cyan"
+dark = "#8be9fd"
+light = "#0090c0"
+
+[[accent]]
+key = "green"
+name = "Green"
+dark = "#50fa7b"
+light = "#1c7a3d"
+
+[[accent]]
+key = "orange"
+name = "Orange"
+dark = "#ffb86c"
+light = "#c55a00"
+
+[[accent]]
+key = "red"
+name = "Red"
+dark = "#ff5555"
+light = "#cc2222"
+
+[[accent]]
+key = "yellow"
+name = "Yellow"
+dark = "#f1fa8c"
+light = "#a07800"
+
+[[pairing]]
+accent = "purple"
+secondary = "pink"
+tertiary = "cyan"
+
+[[pairing]]
+accent = "pink"
+secondary = "purple"
+tertiary = "orange"
+
+[[pairing]]
+accent = "cyan"
+secondary = "green"
+tertiary = "purple"
+
+[[pairing]]
+accent = "green"
+secondary = "cyan"
+tertiary = "yellow"
+
+[[pairing]]
+accent = "orange"
+secondary = "yellow"
+tertiary = "red"
+
+[[pairing]]
+accent = "red"
+secondary = "orange"
+tertiary = "pink"
+
+[[pairing]]
+accent = "yellow"
+secondary = "orange"
+tertiary = "green"

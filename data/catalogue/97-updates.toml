@@ -1,0 +1,114 @@
+#  Automatic updates — BUILD_PLAN §4.22
+#
+#  Genuinely security-relevant and usually forgotten: unpatched packages beat
+#  most of §4.1. APT config syntax is `Key "value";`, handled by the apt syntax.
+
+[section]
+id      = "updates"
+title   = "updates"
+nav     = "Desktop"
+order   = 97
+syntax  = "apt"
+target  = "/etc/apt/apt.conf.d/99-hardening-gui"
+desc    = "Unattended security upgrades and how often apt checks."
+
+[[flag]]
+id      = "apt_periodic_update"
+group   = "updates / schedule"
+key     = "APT::Periodic::Update-Package-Lists"
+value   = "1"
+default = "1"
+title   = "Refresh daily"
+desc    = "Updates the package lists every day"
+why     = "You can't install a fix you don't know exists"
+risk    = "safe"
+
+[[flag]]
+id      = "apt_periodic_download"
+group   = "updates / schedule"
+key     = "APT::Periodic::Download-Upgradeable-Packages"
+value   = "1"
+default = "0"
+title   = "Pre-download upgrades"
+desc    = "Fetches packages before installing"
+why     = "Shortens the window between a fix existing and being applied"
+risk    = "safe"
+
+[[flag]]
+id      = "apt_periodic_unattended"
+group   = "updates / schedule"
+key     = "APT::Periodic::Unattended-Upgrade"
+value   = "1"
+default = "1"
+title   = "Install automatically"
+desc    = "Runs unattended-upgrades daily"
+why     = "Unpatched software is the most common way machines are compromised"
+risk    = "caution"
+breaks  = "Package versions change without you asking"
+
+[[flag]]
+id      = "apt_periodic_autoclean"
+group   = "updates / schedule"
+key     = "APT::Periodic::AutocleanInterval"
+value   = "7"
+default = "0"
+title   = "Clean weekly"
+desc    = "Clears the package cache"
+why     = "Old .debs pile up in /var/cache/apt"
+risk    = "safe"
+
+[[flag]]
+id      = "unattended_security_only"
+group   = "updates / unattended-upgrades"
+key     = "Unattended-Upgrade::Allowed-Origins"
+value   = "{\"${distro_id}:${distro_codename}-security\";}"
+default = "(security + updates)"
+title   = "Security updates only"
+desc    = "Skips feature updates"
+why     = "Security fixes carry far less regression risk than version bumps"
+risk    = "safe"
+
+[[flag]]
+id      = "unattended_remove_unused_kernels"
+group   = "updates / unattended-upgrades"
+key     = "Unattended-Upgrade::Remove-Unused-Kernel-Packages"
+value   = "true"
+default = "true"
+title   = "Remove old kernels"
+desc    = "Keeps /boot from filling up"
+why     = "A full /boot means the next kernel update fails silently"
+risk    = "safe"
+
+[[flag]]
+id      = "unattended_remove_unused_deps"
+group   = "updates / unattended-upgrades"
+key     = "Unattended-Upgrade::Remove-Unused-Dependencies"
+value   = "true"
+default = "false"
+title   = "Remove orphaned packages"
+desc    = "Autoremoves unused dependencies"
+why     = "Fewer installed packages, less attack surface"
+risk    = "caution"
+breaks  = "Removes packages you installed as a dependency and now use directly"
+
+[[flag]]
+id      = "unattended_automatic_reboot"
+group   = "updates / unattended-upgrades"
+key     = "Unattended-Upgrade::Automatic-Reboot"
+value   = "false"
+default = "false"
+title   = "No surprise reboots"
+desc    = "Waits for you to reboot"
+why     = "Kernel fixes need a reboot, but not in the middle of your work"
+risk    = "safe"
+
+[[flag]]
+id      = "unattended_reboot_time"
+group   = "updates / unattended-upgrades"
+key     = "Unattended-Upgrade::Automatic-Reboot-Time"
+value   = "04:00"
+default = "now"
+title   = "Reboot at 4am"
+desc    = "If auto-reboot is on, do it overnight"
+why     = "Only matters with automatic reboot enabled"
+risk    = "safe"

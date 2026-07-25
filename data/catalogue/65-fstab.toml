@@ -1,0 +1,12 @@
+#  Filesystem mounts — BUILD_PLAN §4.10. Highest brick risk in the app.
+
+[section]
+id          = "fstab"
+title        = "fstab"
+nav         = "Access"
+order       = 65
+syntax      = "special"
+implemented = false
+in_place    = true
+plan_ref    = "§4.10"
+desc        = "Per-mount nodev/nosuid/noexec/ro toggles for /tmp, /var/tmp, /dev/shm, /home, /var, /var/log, /boot and hidepid on /proc. Every change is tested with a live `mount -o remount` before fstab is written, and any entry that fails the remount is refused — a bad fstab line drops you to an emergency shell at boot."

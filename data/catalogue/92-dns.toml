@@ -1,0 +1,113 @@
+#  DNS & name resolution — BUILD_PLAN §4.19
+#
+#  Enabling DNSOverTLS while the firewall blocks 853/tcp breaks resolution
+#  completely; the app cross-checks that pair at review time (§4.6).
+
+[section]
+id          = "dns"
+title       = "dns"
+nav         = "Network"
+order       = 92
+syntax      = "ini"
+target      = "/etc/systemd/resolved.conf.d/99-hardening-gui.conf"
+ini_section = "Resolve"
+reload      = [["/usr/bin/systemctl", "restart", "systemd-resolved.service"]]
+desc        = "Encrypted, validated DNS with the LAN name-leak channels turned off."
+
+[[flag]]
+id      = "resolved_dnssec"
+group   = "dns / validation"
+key     = "DNSSEC"
+value   = "yes"
+default = "allow-downgrade"
+title   = "Require DNSSEC"
+desc    = "Rejects unsigned or forged answers"
+why     = "allow-downgrade lets an active attacker simply strip the signatures"
+risk    = "caution"
+breaks  = "Misconfigured domains and some captive portals stop resolving"
+
+[[flag]]
+id      = "resolved_dns_over_tls"
+group   = "dns / validation"
+key     = "DNSOverTLS"
+value   = "yes"
+default = "no"
+title   = "DNS over TLS"
+desc    = "Encrypts queries to the resolver"
+why     = "Plain DNS shows every hostname you visit to the whole path"
+help    = "Needs outbound 853/tcp open. If the firewall is default-deny-out and 853 is not allowed, resolution stops dead — the app warns about exactly that pair before you apply."
+risk    = "caution"
+breaks  = "Resolvers that don't support DoT; captive portals"
+
+[[flag]]
+id       = "resolved_dns"
+group    = "dns / resolvers"
+key      = "DNS"
+value    = "9.9.9.9#dns.quad9.net 149.112.112.112#dns.quad9.net"
+default  = "(from DHCP)"
+editable = true
+pattern  = "[0-9a-fA-F.:#a-z-]+( [0-9a-fA-F.:#a-z-]+)*"
+title    = "Resolvers"
+desc     = "Which servers you actually ask"
+why      = "Your ISP's resolver sees and logs every lookup"
+help     = "The #hostname suffix is the DoT certificate name and is required when DNSOverTLS is on. Quad9 (9.9.9.9#dns.quad9.net), Cloudflare (1.1.1.1#cloudflare-dns.com) and Mullvad (194.242.2.2#dns.mullvad.net) are all fine choices."
+risk     = "caution"
+breaks   = "Internal/corporate names that only the LAN resolver knows"
+
+[[flag]]
+id      = "resolved_fallback_dns"
+group   = "dns / resolvers"
+key     = "FallbackDNS"
+value   = ""
+default = "(Google and Cloudflare)"
+title   = "No fallback resolvers"
+desc    = "Removes the built-in fallbacks"
+why     = "Otherwise a resolver failure silently sends your queries to Google"
+risk    = "caution"
+breaks  = "Resolution fails outright instead of falling back"
+
+[[flag]]
+id      = "resolved_multicast_dns"
+group   = "dns / lan leaks"
+key     = "MulticastDNS"
+value   = "no"
+default = "yes"
+title   = "No mDNS"
+desc    = "Stops .local broadcasts"
+why     = "mDNS announces your hostname and queries to the entire segment"
+risk    = "caution"
+breaks  = "Finding printers, Chromecasts and .local hostnames"
+
+[[flag]]
+id      = "resolved_llmnr"
+group   = "dns / lan leaks"
+key     = "LLMNR"
+value   = "no"
+default = "yes"
+title   = "No LLMNR"
+desc    = "Stops Windows-style name broadcasts"
+why     = "LLMNR poisoning is the standard way to harvest hashes on a LAN"
+risk    = "safe"
+breaks  = "Resolving Windows machine names without DNS"
+
+[[flag]]
+id      = "resolved_cache"
+group   = "dns / behaviour"
+key     = "Cache"
+value   = "no-negative"
+default = "yes"
+title   = "Don't cache failures"
+desc    = "Caches answers, not NXDOMAIN"
+why     = "A poisoned negative answer would otherwise stick around"
+risk    = "safe"
+
+[[flag]]
+id      = "resolved_single_label"
+group   = "dns / behaviour"
+key     = "ResolveUnicastSingleLabel"
+value   = "no"
+default = "no"
+title   = "No single-label lookups"
+desc    = "Won't send bare names upstream"
+why     = "Sending 'server' to a public resolver leaks your internal naming"
+risk    = "safe"

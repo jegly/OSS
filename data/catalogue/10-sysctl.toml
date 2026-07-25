@@ -1,0 +1,1212 @@
+#  sysctl — BUILD_PLAN §4.1 (kernel/memory), §4.2 (namespaces), §4.3 (network)
+#
+#  Everything here lands in one drop-in under /etc/sysctl.d/. Never write to
+#  /usr/lib/sysctl.d/ — package upgrades replace those files (§2).
+
+[section]
+id      = "sysctl"
+title   = "sysctl.d"
+nav     = "System"
+order   = 10
+syntax  = "keyval"
+target  = "/etc/sysctl.d/99-hardening-gui.conf"
+reload  = [["/usr/sbin/sysctl", "--system"]]
+desc    = "Kernel, memory and network tunables applied at boot and on demand."
+
+# --------------------------------------------------------------------------- #
+#  kernel / memory
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "kptr_restrict"
+group   = "kernel / memory"
+key     = "kernel.kptr_restrict"
+value   = "2"
+default = "0"
+values  = ["0", "1", "2"]
+labels  = ["off", "hide from non-root", "hide from everyone"]
+title   = "Restrict kernel pointers"
+desc    = "Hides kernel addresses in /proc"
+why     = "Leaked addresses defeat KASLR"
+help    = "0 shows raw kernel pointers to anyone, 1 hides them from unprivileged users, 2 hides them from everyone including root. Some profiling tools read these addresses."
+risk    = "safe"
+
+[[flag]]
+id      = "dmesg_restrict"
+group   = "kernel / memory"
+key     = "kernel.dmesg_restrict"
+value   = "1"
+default = "0"
+title   = "Restrict dmesg"
+desc    = "Only root reads the kernel log"
+why     = "Kernel logs leak addresses and hardware detail"
+help    = "Unprivileged `dmesg` stops working; use `sudo dmesg` or journalctl -k instead."
+risk    = "safe"
+
+[[flag]]
+id      = "printk_quiet"
+group   = "kernel / memory"
+key     = "kernel.printk"
+value   = "3 3 3 3"
+default = "4 4 1 7"
+title   = "Quiet kernel console"
+desc    = "Keeps kernel messages off the console"
+why     = "Console output leaks state to anyone watching the screen"
+risk    = "safe"
+
+[[flag]]
+id      = "randomize_va_space"
+group   = "kernel / memory"
+key     = "kernel.randomize_va_space"
+value   = "2"
+default = "2"
+values  = ["0", "1", "2"]
+labels  = ["off", "mmap + stack", "full (heap too)"]
+title   = "Full ASLR"
+desc    = "Randomises heap, stack and mmap"
+why     = "Makes memory-corruption exploits guess addresses"
+risk    = "safe"
+
+[[flag]]
+id      = "ptrace_scope"
+satisfied_by = ["2", "3"]
+group   = "kernel / memory"
+key     = "kernel.yama.ptrace_scope"
+value   = "1"
+default = "1"
+values  = ["0", "1", "2", "3"]
+labels  = ["off", "children only", "admin only", "locked (one-way)"]
+one_way_values = ["3"]
+title   = "Ptrace scope"
+desc    = "Limits who can debug other processes"
+why     = "ptrace is how one process reads another's memory"
+help    = "1 lets a process trace only its own children (breaks attaching gdb/strace to a running pid). 2 requires root. 3 disables ptrace entirely and CANNOT be lowered again until reboot."
+risk    = "caution"
+breaks  = "gdb/strace attach at 1+, all ptrace at 3"
+
+[[flag]]
+id      = "sysrq"
+group   = "kernel / memory"
+key     = "kernel.sysrq"
+value   = "0"
+default = "438"
+title   = "Disable magic SysRq"
+desc    = "Blocks the keyboard kernel backdoor"
+why     = "SysRq can dump memory or kill init from the keyboard"
+breaks  = "Emergency sync/reboot key combos"
+risk    = "safe"
+
+[[flag]]
+id      = "kexec_load_disabled"
+group   = "kernel / memory"
+key     = "kernel.kexec_load_disabled"
+value   = "1"
+default = "0"
+title   = "Disable kexec"
+desc    = "Stops loading a new kernel"
+why     = "kexec loads an unsigned kernel over the running one"
+help    = "Cannot be re-enabled without a reboot. If kdump is configured this also makes its reserved crashkernel memory useless — the app checks for that pair."
+risk    = "one-way"
+breaks  = "kexec, kdump crash dumps"
+
+[[flag]]
+id      = "perf_event_paranoid"
+group   = "kernel / memory"
+key     = "kernel.perf_event_paranoid"
+value   = "3"
+default = "4"
+values  = ["0", "1", "2", "3"]
+labels  = ["all events", "no kernel tracing", "no CPU events", "no access at all"]
+title   = "Restrict perf events"
+desc    = "Limits performance-counter access"
+why     = "perf counters are a side-channel and a kernel-info leak"
+risk    = "caution"
+breaks  = "perf, some profilers, bpftrace"
+
+[[flag]]
+id      = "unprivileged_bpf_disabled"
+group   = "kernel / memory"
+key     = "kernel.unprivileged_bpf_disabled"
+value   = "1"
+default = "2"
+title   = "Block unprivileged BPF"
+desc    = "Breaks some eBPF tooling"
+why     = "The BPF verifier is a recurring source of LPE bugs"
+risk    = "caution"
+breaks  = "Unprivileged eBPF tools"
+
+[[flag]]
+id      = "bpf_jit_harden"
+group   = "kernel / memory"
+key     = "net.core.bpf_jit_harden"
+value   = "2"
+default = "0"
+values  = ["0", "1", "2"]
+labels  = ["off", "unprivileged only", "all users"]
+title   = "Harden the BPF JIT"
+desc    = "Blinds constants in JIT-compiled BPF"
+why     = "Stops JIT spraying from planting attacker constants"
+risk    = "safe"
+
+[[flag]]
+id      = "modules_disabled"
+group   = "kernel / memory"
+key     = "kernel.modules_disabled"
+value   = "1"
+default = "0"
+apply_last = true
+title   = "Lock module loading"
+desc    = "No more kernel modules, ever"
+why     = "Loading a module is the cleanest way to own a kernel"
+help    = "Applied last in the transaction. Nothing can load a module until reboot — including your own hardware if you hotplug it."
+risk    = "one-way"
+breaks  = "All later module loads, new hardware, DKMS"
+
+[[flag]]
+id      = "io_uring_disabled"
+group   = "kernel / memory"
+key     = "kernel.io_uring_disabled"
+value   = "2"
+default = "0"
+values  = ["0", "1", "2"]
+labels  = ["allowed", "privileged only", "disabled"]
+title   = "Restrict io_uring"
+desc    = "Blocks the io_uring syscall interface"
+why     = "io_uring bypasses many seccomp filters and has a bad CVE record"
+risk    = "caution"
+breaks  = "Software built on io_uring (some DBs, newer runtimes)"
+
+[[flag]]
+id      = "core_pattern_false"
+group   = "kernel / memory"
+key     = "kernel.core_pattern"
+value   = "|/bin/false"
+default = "core"
+title   = "Discard core dumps"
+desc    = "Sends crash dumps nowhere"
+why     = "Core files contain keys and plaintext from memory"
+risk    = "safe"
+
+[[flag]]
+id      = "core_uses_pid"
+group   = "kernel / memory"
+key     = "kernel.core_uses_pid"
+value   = "1"
+default = "1"
+title   = "PID in core filenames"
+desc    = "Stops cores overwriting each other"
+why     = "Predictable core names are a symlink-attack target"
+risk    = "safe"
+
+[[flag]]
+id      = "panic_on_oops"
+group   = "kernel / memory"
+key     = "kernel.panic_on_oops"
+value   = "1"
+default = "1"
+title   = "Panic on oops"
+desc    = "Halts instead of limping on"
+why     = "An oops mid-exploit means the kernel is already inconsistent"
+risk    = "caution"
+breaks  = "Machine reboots instead of surviving a driver bug"
+
+[[flag]]
+id      = "panic_timeout"
+group   = "kernel / memory"
+key     = "kernel.panic"
+value   = "20"
+default = "0"
+title   = "Reboot after panic"
+desc    = "Reboots 20s after a panic"
+why     = "A panicked box left sitting is a box with unlocked RAM"
+risk    = "safe"
+
+[[flag]]
+id      = "oops_limit"
+group   = "kernel / memory"
+key     = "kernel.oops_limit"
+value   = "100"
+default = "10000"
+title   = "Oops limit"
+desc    = "Panics after repeated oopses"
+why     = "Exploit brute-forcing generates oopses by the thousand"
+risk    = "safe"
+
+[[flag]]
+id      = "warn_limit"
+group   = "kernel / memory"
+key     = "kernel.warn_limit"
+value   = "100"
+default = "0"
+title   = "Warning limit"
+desc    = "Panics after repeated warnings"
+why     = "Same reason as the oops limit"
+risk    = "safe"
+
+[[flag]]
+id      = "ctrl_alt_del"
+group   = "kernel / memory"
+key     = "kernel.ctrl-alt-del"
+value   = "0"
+default = "0"
+title   = "Ignore Ctrl-Alt-Del"
+desc    = "No reboot from the keyboard"
+why     = "Physical access shouldn't mean instant reboot"
+risk    = "safe"
+
+[[flag]]
+id      = "pid_max"
+group   = "kernel / memory"
+key     = "kernel.pid_max"
+value   = "65536"
+default = "4194304"
+title   = "Cap PID space"
+desc    = "Limits total live processes"
+why     = "Bounds fork-bomb damage and PID reuse races"
+risk    = "safe"
+
+[[flag]]
+id      = "mmap_min_addr"
+group   = "kernel / memory"
+key     = "vm.mmap_min_addr"
+value   = "65536"
+default = "65536"
+title   = "Block low-address mmap"
+desc    = "Reserves the bottom 64K of memory"
+why     = "Stops NULL-pointer-dereference bugs becoming exploits"
+risk    = "safe"
+
+[[flag]]
+id      = "mmap_rnd_bits"
+group   = "kernel / memory"
+key     = "vm.mmap_rnd_bits"
+value   = "32"
+default = "28"
+title   = "Max mmap randomisation"
+desc    = "More entropy in 64-bit mmap addresses"
+why     = "More ASLR bits means more guesses needed"
+risk    = "safe"
+
+[[flag]]
+id      = "mmap_rnd_compat_bits"
+group   = "kernel / memory"
+key     = "vm.mmap_rnd_compat_bits"
+value   = "16"
+default = "8"
+title   = "Max 32-bit randomisation"
+desc    = "Same, for 32-bit processes"
+why     = "32-bit ASLR is weak by default"
+risk    = "safe"
+
+[[flag]]
+id      = "unprivileged_userfaultfd"
+group   = "kernel / memory"
+key     = "vm.unprivileged_userfaultfd"
+value   = "0"
+default = "0"
+title   = "Block userfaultfd"
+desc    = "Removes a use-after-free helper"
+why     = "userfaultfd is the standard tool for winning kernel UAF races"
+risk    = "safe"
+
+[[flag]]
+id      = "max_map_count"
+group   = "kernel / memory"
+key     = "vm.max_map_count"
+value   = "1048576"
+default = "65530"
+title   = "Raise mapping limit"
+desc    = "Needed by hardened allocators"
+why     = "Guard pages and ASLR spacing use far more mappings"
+risk    = "safe"
+
+[[flag]]
+id      = "panic_on_oom"
+group   = "kernel / memory"
+key     = "vm.panic_on_oom"
+value   = "0"
+default = "0"
+title   = "Don't panic on OOM"
+desc    = "Let the OOM killer do its job"
+why     = "Panicking on memory pressure is a self-inflicted DoS"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  tty
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "ldisc_autoload"
+group   = "tty"
+key     = "dev.tty.ldisc_autoload"
+value   = "0"
+default = "1"
+title   = "No line-discipline autoload"
+desc    = "Blocks auto-loading tty drivers"
+why     = "Line disciplines are rarely-audited kernel code an unprivileged user can load"
+risk    = "safe"
+
+[[flag]]
+id      = "legacy_tiocsti"
+group   = "tty"
+key     = "dev.tty.legacy_tiocsti"
+value   = "0"
+default = "0"
+title   = "Disable TIOCSTI"
+desc    = "Stops fake keystroke injection"
+why     = "TIOCSTI lets a sandboxed process type into your terminal"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  filesystem
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "suid_dumpable"
+group   = "filesystem"
+key     = "fs.suid_dumpable"
+value   = "0"
+default = "2"
+title   = "No SUID core dumps"
+desc    = "Setuid crashes dump nothing"
+why     = "A setuid core dump is root-owned memory on disk"
+risk    = "safe"
+
+[[flag]]
+id      = "protected_symlinks"
+group   = "filesystem"
+key     = "fs.protected_symlinks"
+value   = "1"
+default = "1"
+title   = "Protect symlinks"
+desc    = "Blocks /tmp symlink attacks"
+why     = "Classic privilege escalation via a symlink in a shared directory"
+risk    = "safe"
+
+[[flag]]
+id      = "protected_hardlinks"
+group   = "filesystem"
+key     = "fs.protected_hardlinks"
+value   = "1"
+default = "1"
+title   = "Protect hardlinks"
+desc    = "Blocks hardlink-to-root-file tricks"
+why     = "Same attack, using a hardlink to a file you can't read"
+risk    = "safe"
+
+[[flag]]
+id      = "protected_fifos"
+group   = "filesystem"
+key     = "fs.protected_fifos"
+value   = "2"
+default = "1"
+title   = "Protect FIFOs"
+desc    = "No writes to others' FIFOs in /tmp"
+why     = "A planted FIFO makes a privileged writer block or leak"
+risk    = "safe"
+
+[[flag]]
+id      = "protected_regular"
+group   = "filesystem"
+key     = "fs.protected_regular"
+value   = "2"
+default = "2"
+title   = "Protect regular files"
+desc    = "No writes to others' files in /tmp"
+why     = "Completes the sticky-directory protection set"
+risk    = "safe"
+
+[[flag]]
+id      = "binfmt_misc_off"
+group   = "filesystem"
+key     = "fs.binfmt_misc.status"
+value   = "0"
+default = "1"
+title   = "Disable binfmt_misc"
+desc    = "No custom executable handlers"
+why     = "binfmt_misc registers arbitrary interpreters for arbitrary file magic"
+risk    = "breaking"
+breaks  = "Wine, qemu-user, some container runtimes"
+
+# --------------------------------------------------------------------------- #
+#  namespaces / apparmor  (§4.2)
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "apparmor_restrict_userns"
+group   = "namespaces / apparmor"
+key     = "kernel.apparmor_restrict_unprivileged_userns"
+value   = "1"
+default = "1"
+title   = "Restrict unprivileged userns"
+desc    = "AppArmor-gates user namespaces"
+why     = "Unprivileged user namespaces are the entry point for most container escapes"
+help    = "On 26.04 snapd and Flatpak carry the userns permission in their profiles, so this is safer than its reputation. Anything without a profile that needs userns still breaks."
+risk    = "caution"
+breaks  = "Unprofiled bwrap/Chrome sandbox/rootless Docker"
+
+[[flag]]
+id      = "apparmor_restrict_userns_force"
+group   = "namespaces / apparmor"
+key     = "kernel.apparmor_restrict_unprivileged_userns_force"
+value   = "1"
+default = "0"
+title   = "Force userns restriction"
+desc    = "Applies even to unconfined tasks"
+why     = "Closes the unconfined-process bypass of the flag above"
+risk    = "breaking"
+breaks  = "Flatpak, Snap, Chrome sandbox, rootless Docker"
+
+[[flag]]
+id      = "apparmor_restrict_userns_complain"
+group   = "namespaces / apparmor"
+key     = "kernel.apparmor_restrict_unprivileged_userns_complain"
+value   = "0"
+default = "0"
+title   = "Enforce, don't just log"
+desc    = "Turns off complain-only mode"
+why     = "Complain mode logs the violation and allows it anyway"
+risk    = "caution"
+
+[[flag]]
+id      = "apparmor_restrict_unconfined"
+group   = "namespaces / apparmor"
+key     = "kernel.apparmor_restrict_unprivileged_unconfined"
+value   = "1"
+default = "1"
+title   = "Restrict unconfined tasks"
+desc    = "Unprofiled processes lose userns too"
+why     = "Otherwise anything without a profile is exempt"
+risk    = "caution"
+
+[[flag]]
+id      = "apparmor_restrict_io_uring"
+group   = "namespaces / apparmor"
+key     = "kernel.apparmor_restrict_unprivileged_io_uring"
+value   = "1"
+default = "0"
+title   = "AppArmor-gate io_uring"
+desc    = "Mediates io_uring per profile"
+why     = "io_uring operations otherwise skip LSM checks"
+risk    = "caution"
+
+[[flag]]
+id      = "unprivileged_userns_apparmor_policy"
+group   = "namespaces / apparmor"
+key     = "kernel.unprivileged_userns_apparmor_policy"
+value   = "1"
+default = "1"
+title   = "Confine userns policy loads"
+desc    = "No unprivileged profile stacking"
+why     = "Otherwise a user namespace can load its own permissive policy"
+risk    = "safe"
+
+[[flag]]
+id      = "unprivileged_userns_clone"
+group   = "namespaces / apparmor"
+key     = "kernel.unprivileged_userns_clone"
+value   = "0"
+default = "1"
+title   = "Block userns clone"
+desc    = "The Debian-style hard switch"
+why     = "Blocks unprivileged CLONE_NEWUSER outright, no LSM involved"
+help    = "Verified present on 26.04 (kernel 7.0.0-28) alongside the apparmor_* keys. If a future kernel drops it the read-back after Apply reports it as invalid rather than silently succeeding."
+risk    = "breaking"
+breaks  = "Flatpak, Snap, Chrome sandbox, bwrap"
+
+[[flag]]
+id      = "max_user_namespaces"
+group   = "namespaces / apparmor"
+key     = "user.max_user_namespaces"
+value   = "0"
+default = "63592"
+title   = "No user namespaces at all"
+desc    = "Hard zero — nothing gets one"
+why     = "The strongest version: no user namespace can be created by anyone"
+help    = "This is the variant that really does break snaps, unlike the apparmor_restrict_* set."
+risk    = "breaking"
+breaks  = "Snaps (including Firefox), Flatpak, containers"
+
+# --------------------------------------------------------------------------- #
+#  network / ipv4  (§4.3)
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "rp_filter_all"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.rp_filter"
+value   = "1"
+default = "2"
+values  = ["0", "1", "2"]
+labels  = ["off", "strict", "loose"]
+title   = "Reverse-path filter (all)"
+desc    = "Drops spoofed source addresses"
+why     = "A packet arriving on the wrong interface is forged"
+help    = "Strict (1) drops anything whose route back doesn't use the arrival interface. Loose (2) only needs a route to exist anywhere — use it on multi-homed or VPN hosts."
+risk    = "caution"
+breaks  = "Asymmetric routing, some VPN setups (use loose)"
+
+[[flag]]
+id      = "rp_filter_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.rp_filter"
+value   = "1"
+default = "2"
+values  = ["0", "1", "2"]
+labels  = ["off", "strict", "loose"]
+title   = "Reverse-path filter (new)"
+desc    = "Same, for interfaces added later"
+why     = "Without this a hotplugged interface comes up unfiltered"
+risk    = "caution"
+
+[[flag]]
+id      = "accept_redirects_all"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.accept_redirects"
+value   = "0"
+default = "1"
+title   = "Ignore ICMP redirects"
+desc    = "Nobody reroutes your traffic"
+why     = "An ICMP redirect is an unauthenticated route change"
+risk    = "safe"
+
+[[flag]]
+id      = "accept_redirects_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.accept_redirects"
+value   = "0"
+default = "1"
+title   = "Ignore redirects (new)"
+desc    = "Same, for new interfaces"
+why     = "New interfaces default to accepting redirects"
+risk    = "safe"
+
+[[flag]]
+id      = "secure_redirects_all"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.secure_redirects"
+value   = "0"
+default = "1"
+title   = "No gateway redirects"
+desc    = "Not even from your own gateway"
+why     = "Trusting the gateway still trusts whoever spoofs it"
+risk    = "safe"
+
+[[flag]]
+id      = "secure_redirects_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.secure_redirects"
+value   = "0"
+default = "1"
+title   = "No gateway redirects (new)"
+desc    = "Same, for new interfaces"
+why     = "Completes the redirect lockdown"
+risk    = "safe"
+
+[[flag]]
+id      = "send_redirects_all"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.send_redirects"
+value   = "0"
+default = "1"
+title   = "Don't send redirects"
+desc    = "Stops acting like a router"
+why     = "Only routers should emit redirects; a desktop leaks topology"
+risk    = "safe"
+
+[[flag]]
+id      = "send_redirects_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.send_redirects"
+value   = "0"
+default = "1"
+title   = "Don't send redirects (new)"
+desc    = "Same, for new interfaces"
+why     = "Same reason"
+risk    = "safe"
+
+[[flag]]
+id      = "accept_source_route_all"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.accept_source_route"
+value   = "0"
+default = "0"
+title   = "Drop source-routed packets"
+desc    = "Sender can't pick the path"
+why     = "Source routing is used to bypass filtering and reach internal hosts"
+risk    = "safe"
+
+[[flag]]
+id      = "accept_source_route_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.accept_source_route"
+value   = "0"
+default = "1"
+title   = "Drop source-routed (new)"
+desc    = "Same, for new interfaces"
+why     = "Same reason"
+risk    = "safe"
+
+[[flag]]
+id      = "log_martians"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.log_martians"
+value   = "1"
+default = "0"
+title   = "Log impossible packets"
+desc    = "Records spoofed source addresses"
+why     = "Martian logs are the earliest sign of someone probing you"
+risk    = "safe"
+breaks  = "Noisy logs on some networks"
+
+[[flag]]
+id      = "arp_ignore"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.arp_ignore"
+value   = "1"
+default = "0"
+title   = "Strict ARP replies"
+desc    = "Only answers for the right interface"
+why     = "Reduces ARP-based host discovery and cache poisoning"
+risk    = "safe"
+
+[[flag]]
+id      = "arp_announce"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.arp_announce"
+value   = "2"
+default = "0"
+title   = "Strict ARP announce"
+desc    = "Uses the best local source address"
+why     = "Stops leaking addresses from other interfaces onto the wire"
+risk    = "safe"
+
+[[flag]]
+id      = "drop_gratuitous_arp"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.drop_gratuitous_arp"
+value   = "1"
+default = "0"
+title   = "Drop gratuitous ARP"
+desc    = "Ignores unsolicited ARP updates"
+why     = "Unsolicited ARP is how ARP spoofing works"
+risk    = "safe"
+
+[[flag]]
+id      = "shared_media"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.shared_media"
+value   = "0"
+default = "1"
+title   = "No shared media"
+desc    = "Assumes one subnet per interface"
+why     = "Prevents accepting off-subnet traffic as local"
+risk    = "safe"
+
+[[flag]]
+id      = "bootp_relay"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.bootp_relay"
+value   = "0"
+default = "0"
+title   = "No BOOTP relay"
+desc    = "Won't forward BOOTP/DHCP"
+why     = "Relaying DHCP for strangers is never what you want on a client"
+risk    = "safe"
+
+[[flag]]
+id      = "proxy_arp"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.proxy_arp"
+value   = "0"
+default = "0"
+title   = "No proxy ARP"
+desc    = "Won't answer ARP for others"
+why     = "Proxy ARP lets you silently MITM a subnet"
+risk    = "safe"
+
+[[flag]]
+id      = "ip_forward"
+group   = "network / ipv4"
+key     = "net.ipv4.ip_forward"
+value   = "0"
+default = "0"
+title   = "No IP forwarding"
+desc    = "This machine is not a router"
+why     = "Forwarding turns a compromised host into a pivot"
+risk    = "caution"
+breaks  = "NAT, container bridges, VPN gateways, KVM networking"
+
+[[flag]]
+id      = "conf_all_forwarding"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.forwarding"
+value   = "0"
+default = "0"
+title   = "No per-interface forwarding"
+desc    = "Same, at interface level"
+why     = "Belt and braces with ip_forward"
+risk    = "caution"
+breaks  = "Container and VM bridges"
+
+[[flag]]
+id      = "ip_local_port_range"
+group   = "network / ipv4"
+key     = "net.ipv4.ip_local_port_range"
+value   = "32768 60999"
+default = "32768 60999"
+title   = "Ephemeral port range"
+desc    = "Keeps source ports out of service range"
+why     = "Avoids local sockets colliding with privileged service ports"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  network / tcp
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "tcp_syncookies"
+group   = "network / tcp"
+key     = "net.ipv4.tcp_syncookies"
+value   = "1"
+default = "1"
+title   = "SYN cookies"
+desc    = "Survives a SYN flood"
+why     = "Keeps accepting connections when the backlog is full"
+risk    = "safe"
+
+[[flag]]
+id      = "tcp_rfc1337"
+group   = "network / tcp"
+key     = "net.ipv4.tcp_rfc1337"
+value   = "1"
+default = "0"
+title   = "RFC1337 protection"
+desc    = "Drops RST in TIME_WAIT"
+why     = "Closes the TIME_WAIT assassination hijack"
+risk    = "safe"
+
+[[flag]]
+id      = "tcp_timestamps"
+group   = "network / tcp"
+key     = "net.ipv4.tcp_timestamps"
+value   = "0"
+default = "1"
+title   = "Disable TCP timestamps"
+desc    = "Hides your uptime and boot time"
+why     = "Timestamps fingerprint the host and leak uptime"
+risk    = "caution"
+breaks  = "PAWS on high-bandwidth long-fat links"
+
+[[flag]]
+id      = "tcp_sack"
+group   = "network / tcp"
+key     = "net.ipv4.tcp_sack"
+value   = "0"
+default = "1"
+title   = "Disable SACK"
+desc    = "Removes the SACK panic surface"
+why     = "Selective ACK has produced remote kernel DoS bugs"
+risk    = "caution"
+breaks  = "Throughput on lossy or long-distance links"
+
+[[flag]]
+id      = "tcp_dsack"
+group   = "network / tcp"
+key     = "net.ipv4.tcp_dsack"
+value   = "0"
+default = "1"
+title   = "Disable DSACK"
+desc    = "Same family as SACK"
+why     = "Duplicate-SACK shares the SACK code paths"
+risk    = "caution"
+breaks  = "Loss-recovery efficiency"
+
+[[flag]]
+id      = "tcp_fack"
+group   = "network / tcp"
+key     = "net.ipv4.tcp_fack"
+value   = "0"
+default = "0"
+title   = "Disable FACK"
+desc    = "Forward-ACK congestion control off"
+why     = "Removed in newer kernels; kept for capture fidelity"
+risk    = "safe"
+
+[[flag]]
+id      = "tcp_max_syn_backlog"
+group   = "network / tcp"
+key     = "net.ipv4.tcp_max_syn_backlog"
+value   = "4096"
+default = "1024"
+title   = "Bigger SYN backlog"
+desc    = "More half-open connections queued"
+why     = "Pairs with SYN cookies to ride out a flood"
+risk    = "safe"
+
+[[flag]]
+id      = "tcp_synack_retries"
+group   = "network / tcp"
+key     = "net.ipv4.tcp_synack_retries"
+value   = "2"
+default = "5"
+title   = "Fewer SYN-ACK retries"
+desc    = "Gives up on half-open sockets sooner"
+why     = "Frees flood-held resources faster"
+risk    = "safe"
+
+[[flag]]
+id      = "tcp_syn_retries"
+group   = "network / tcp"
+key     = "net.ipv4.tcp_syn_retries"
+value   = "3"
+default = "6"
+title   = "Fewer SYN retries"
+desc    = "Outbound connections fail faster"
+why     = "Shortens the window a blocked connection stays pending"
+risk    = "safe"
+
+[[flag]]
+id      = "tcp_challenge_ack_limit"
+group   = "network / tcp"
+key     = "net.ipv4.tcp_challenge_ack_limit"
+value   = "1000000"
+default = "1000"
+title   = "Raise challenge-ACK limit"
+desc    = "Closes a blind in-window side channel"
+why     = "The default rate limit leaks whether a connection exists (CVE-2016-5696)"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  network / icmp
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "icmp_echo_ignore_all"
+group   = "network / icmp"
+key     = "net.ipv4.icmp_echo_ignore_all"
+value   = "1"
+default = "0"
+title   = "Don't answer pings"
+desc    = "No ICMP echo replies at all"
+why     = "Silent hosts don't show up in a sweep"
+risk    = "caution"
+breaks  = "Captive portals, some monitoring, your own ping tests"
+
+[[flag]]
+id      = "icmp_echo_ignore_broadcasts"
+group   = "network / icmp"
+key     = "net.ipv4.icmp_echo_ignore_broadcasts"
+value   = "1"
+default = "1"
+title   = "Ignore broadcast pings"
+desc    = "Won't amplify a smurf attack"
+why     = "Broadcast echo replies make you a DDoS amplifier"
+risk    = "safe"
+
+[[flag]]
+id      = "icmp_ignore_bogus_errors"
+group   = "network / icmp"
+key     = "net.ipv4.icmp_ignore_bogus_error_responses"
+value   = "1"
+default = "1"
+title   = "Ignore bogus ICMP errors"
+desc    = "Drops malformed error packets"
+why     = "Avoids log spam and forged path-MTU games"
+risk    = "safe"
+
+[[flag]]
+id      = "icmp_ratelimit"
+group   = "network / icmp"
+key     = "net.ipv4.icmp_ratelimit"
+value   = "100"
+default = "1000"
+title   = "Rate-limit ICMP"
+desc    = "Caps outgoing ICMP errors"
+why     = "Limits what an attacker learns by probing closed ports"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  network / ipv6
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "disable_ipv6_all"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.disable_ipv6"
+value   = "1"
+default = "0"
+title   = "Disable IPv6"
+desc    = "Turns the whole stack off"
+why     = "An unconfigured IPv6 stack is an unfirewalled second front door"
+help    = "With this on, every other IPv6 flag is redundant — the app greys them out."
+risk    = "caution"
+breaks  = "IPv6-only networks and services"
+
+[[flag]]
+id      = "disable_ipv6_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.disable_ipv6"
+value   = "1"
+default = "0"
+title   = "Disable IPv6 (new)"
+desc    = "Same, for interfaces added later"
+why     = "Otherwise a hotplugged interface brings IPv6 back"
+risk    = "caution"
+
+[[flag]]
+id      = "disable_ipv6_lo"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.lo.disable_ipv6"
+value   = "1"
+default = "0"
+title   = "Disable IPv6 on loopback"
+desc    = "Also drops ::1"
+why     = "Completes the shutdown"
+risk    = "breaking"
+breaks  = "Anything that connects to ::1 (some daemons, test suites)"
+
+[[flag]]
+id      = "ipv6_accept_ra"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.accept_ra"
+value   = "0"
+default = "1"
+title   = "Ignore router advertisements"
+desc    = "No autoconfig from the network"
+why     = "A rogue RA reroutes all your IPv6 traffic — no auth required"
+risk    = "caution"
+breaks  = "SLAAC addressing on IPv6 networks"
+
+[[flag]]
+id      = "ipv6_accept_ra_defrtr"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.accept_ra_defrtr"
+value   = "0"
+default = "1"
+title   = "No default route from RA"
+desc    = "Won't take a gateway from an RA"
+why     = "The gateway is the whole prize in an RA attack"
+risk    = "caution"
+
+[[flag]]
+id      = "ipv6_accept_ra_pinfo"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.accept_ra_pinfo"
+value   = "0"
+default = "1"
+title   = "No prefixes from RA"
+desc    = "Ignores advertised prefixes"
+why     = "Stops an attacker choosing your subnet"
+risk    = "caution"
+
+[[flag]]
+id      = "ipv6_accept_ra_rtr_pref"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.accept_ra_rtr_pref"
+value   = "0"
+default = "1"
+title   = "Ignore router preference"
+desc    = "No RA priority games"
+why     = "Router preference is how a rogue RA outranks the real gateway"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_accept_redirects"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.accept_redirects"
+value   = "0"
+default = "1"
+title   = "Ignore IPv6 redirects"
+desc    = "Same as the IPv4 version"
+why     = "Unauthenticated route changes, v6 edition"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_accept_source_route"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.accept_source_route"
+value   = "-1"
+default = "0"
+title   = "Drop source-routed IPv6"
+desc    = "Refuses routing headers"
+why     = "-1 rejects them outright rather than merely not forwarding"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_router_solicitations"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.router_solicitations"
+value   = "0"
+default = "-1"
+title   = "Don't solicit routers"
+desc    = "Stops asking for an RA"
+why     = "Soliciting announces your presence to the segment"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_autoconf"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.autoconf"
+value   = "0"
+default = "1"
+title   = "No IPv6 autoconfig"
+desc    = "Addresses come from you, not the LAN"
+why     = "SLAAC addresses derive from network-controlled input"
+risk    = "caution"
+breaks  = "Automatic IPv6 addressing"
+
+[[flag]]
+id      = "ipv6_max_addresses"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.max_addresses"
+value   = "1"
+default = "16"
+title   = "Cap IPv6 addresses"
+desc    = "One address per interface"
+why     = "Bounds an RA-flood address-exhaustion DoS"
+risk    = "caution"
+breaks  = "Privacy-extension temporary addresses"
+
+[[flag]]
+id      = "ipv6_use_tempaddr"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.use_tempaddr"
+value   = "2"
+default = "0"
+title   = "Prefer temporary addresses"
+desc    = "Rotating addresses for outbound"
+why     = "Stops your MAC-derived address tracking you across networks"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_temp_prefered_lft"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.temp_prefered_lft"
+value   = "3600"
+default = "86400"
+title   = "Rotate hourly"
+desc    = "Preferred lifetime of a temp address"
+why     = "Shorter lifetime, shorter tracking window"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_temp_valid_lft"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.temp_valid_lft"
+value   = "7200"
+default = "604800"
+title   = "Expire in two hours"
+desc    = "Valid lifetime of a temp address"
+why     = "Old addresses stop being reachable sooner"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  found on the reference machine (§5.4) — keys it sets that were not yet here
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "ping_group_range"
+group   = "network / icmp"
+key     = "net.ipv4.ping_group_range"
+value   = "1 0"
+default = "0 2147483647"
+values  = ["1 0", "0 0", "0 2147483647"]
+labels  = ["nobody", "root only", "everyone (stock)"]
+title   = "Who may send pings"
+desc    = "Restricts ICMP echo sockets"
+why     = "Unprivileged ping sockets are a raw-socket path most desktops never need"
+help    = "An empty range (1 0) means no group at all. Ubuntu ships the whole range open so `ping` works without setuid."
+risk    = "caution"
+breaks  = "ping as a normal user"
+
+[[flag]]
+id      = "promote_secondaries_all"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.promote_secondaries"
+value   = "1"
+default = "0"
+title   = "Promote secondary addresses"
+desc    = "Keeps secondaries when the primary goes"
+why     = "Otherwise removing the primary address silently drops every secondary on that interface"
+risk    = "safe"
+
+[[flag]]
+id      = "promote_secondaries_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.promote_secondaries"
+value   = "1"
+default = "0"
+title   = "Promote secondaries (new)"
+desc    = "Same, for interfaces added later"
+why     = "Same reason"
+risk    = "safe"
+
+[[flag]]
+id      = "default_qdisc"
+group   = "network / tcp"
+key     = "net.core.default_qdisc"
+value   = "fq_codel"
+default = "fq_codel"
+values  = ["fq_codel", "fq", "cake", "pfifo_fast"]
+labels  = ["fq_codel", "fq", "cake", "pfifo_fast (stock)"]
+title   = "Queueing discipline"
+desc    = "Controls bufferbloat under load"
+why     = "Not hardening, but it is what keeps a saturated link responsive"
+risk    = "safe"
+
+[[flag]]
+id      = "inotify_max_user_watches"
+group   = "filesystem"
+key     = "fs.inotify.max_user_watches"
+value   = "65536"
+default = "65536"
+title   = "inotify watch limit"
+desc    = "How many files can be watched"
+why     = "Bounds what one user can pin in kernel memory with watches"
+risk    = "safe"
+breaks  = "File indexers and IDEs on very large trees, if set too low"
+
+[[flag]]
+id      = "ipv6_accept_ra_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.accept_ra"
+value   = "0"
+default = "1"
+title   = "Ignore RAs (new)"
+desc    = "Same, for interfaces added later"
+why     = "Without this a hotplugged interface still takes a rogue router advertisement"
+risk    = "caution"
+
+[[flag]]
+id      = "ipv6_accept_redirects_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.accept_redirects"
+value   = "0"
+default = "1"
+title   = "Ignore IPv6 redirects (new)"
+desc    = "Same, for interfaces added later"
+why     = "Same reason"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_accept_source_route_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.accept_source_route"
+value   = "-1"
+default = "0"
+title   = "Drop source-routed IPv6 (new)"
+desc    = "Same, for interfaces added later"
+why     = "Same reason"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_use_tempaddr_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.use_tempaddr"
+value   = "2"
+default = "0"
+title   = "Temporary addresses (new)"
+desc    = "Same, for interfaces added later"
+why     = "Privacy extensions only help if new interfaces get them too"
+risk    = "safe"
