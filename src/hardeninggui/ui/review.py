@@ -18,7 +18,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
-from .. import privileged, probe, render  # noqa: E402
+from .. import privileged, probe, render, ufw as ufw_module  # noqa: E402
 from .style import mark_solid  # noqa: E402
 
 
@@ -141,6 +141,16 @@ class ReviewDialog(Adw.Window):
                 "; ".join(str(c) for c in self.plan.commands) or "none",
             )
         )
+
+        firewall = self.window.firewall_changes()
+        if firewall:
+            counts.add(
+                self._row(
+                    f"{len(firewall)} firewall change(s)",
+                    "Run last in the transaction, because a firewall rule is the "
+                    "thing most likely to cut the connection you are working over.",
+                )
+            )
         if self.plan.user_commands:
             counts.add(
                 self._row(
@@ -277,6 +287,16 @@ class ReviewDialog(Adw.Window):
             root.add(self._row("none", ""))
         page.add(root)
 
+        firewall = self.window.firewall_changes()
+        if firewall:
+            group = Adw.PreferencesGroup(
+                title="Firewall",
+                description="Applied last, through the ufw command line.",
+            )
+            for argv, why in firewall:
+                group.add(self._row(" ".join(argv), why))
+            page.add(group)
+
         if self.plan.user_commands:
             user = Adw.PreferencesGroup(
                 title="Run as you",
@@ -336,11 +356,18 @@ class ApplyProgressDialog(Adw.Window):
 
     def _start(self) -> None:
         selection = dict(self.window.staging.selection)
-        thread = threading.Thread(target=self._worker, args=(selection,), daemon=True)
+        firewall = (
+            ufw_module.to_payload(self.window.firewall)
+            if self.window.firewall_dirty
+            else None
+        )
+        thread = threading.Thread(
+            target=self._worker, args=(selection, firewall), daemon=True
+        )
         thread.start()
 
-    def _worker(self, selection: dict[str, str]) -> None:
-        outcome = privileged.apply(selection)
+    def _worker(self, selection: dict[str, str], firewall: dict | None) -> None:
+        outcome = privileged.apply(selection, firewall=firewall)
         user_results = []
         if outcome.ok:
             plan = build_plan(self.window)

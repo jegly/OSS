@@ -1,11 +1,15 @@
-#  Firewall — BUILD_PLAN §4.6. Dedicated rule editor, not a flag grid.
+#  Firewall — BUILD_PLAN §4.6.
+#
+#  A rule list is not a set of toggles, so this section has no flags: it is
+#  edited through its own page and applied with the ufw command line. The
+#  catalogue entry exists so the section appears in the sidebar and carries its
+#  description.
 
 [section]
-id          = "ufw"
-title       = "ufw"
-nav         = "Network"
-order       = 40
-syntax      = "special"
-implemented = false
-plan_ref    = "§4.6"
-desc        = "Enable/disable, default in/out/routed policy, logging level, IPv6, and the rule list with add/delete/reorder and `ufw limit`. Presets: deny all inbound, deny inbound + outbound allowlist, SSH from LAN only. Includes the default-deny-outbound helper chips (NTP 123/udp, DoT 853/tcp, DHCP 67:68/udp) and the redundant-rule cleanup view. Everything through the ufw CLI, never by editing user.rules."
+id       = "ufw"
+title    = "ufw"
+nav      = "Network"
+order    = 40
+syntax   = "special"
+plan_ref = "§4.6"
+desc     = "Default in/out/routed policy, logging, and the rule list. Policies and the enabled state are read from files anyone can read; the rules themselves live in root-only files and take one privileged read. Everything is applied through the ufw CLI, never by editing user.rules."

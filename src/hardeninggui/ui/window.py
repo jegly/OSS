@@ -17,7 +17,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 from .. import presets as presets_module  # noqa: E402
-from .. import probe, settings as settings_module  # noqa: E402
+from .. import probe, settings as settings_module, ufw as ufw_module  # noqa: E402
 from ..catalogue import Catalogue, Section  # noqa: E402
 from ..probe import State  # noqa: E402
 from ..staging import Staging  # noqa: E402
@@ -60,6 +60,12 @@ class MainWindow(Adw.ApplicationWindow):
         self.staging = staging
         self.style_manager = style_manager
         self.app_settings = app_settings
+
+        # Firewall state is edited directly rather than through the flag
+        # catalogue: a rule list is not a set of toggles.
+        self.firewall = ufw_module.read_unprivileged()
+        self.firewall_baseline = self.firewall.copy()
+        self.firewall_dirty = False
 
         self.states = probe.all_states(catalogue, facts, staging.selection)
         self.unaffected = probe.unaffected_mitigations(catalogue, facts)
@@ -161,24 +167,12 @@ class MainWindow(Adw.ApplicationWindow):
         self.search_entry.set_max_width_chars(22)
         self.search_entry.connect("search-changed", self._on_search)
         self.header.pack_start(self.search_entry)
+        self.header.pack_start(self._build_filter_menu())
 
-        self.counter = Gtk.Label(label="0 changed")
-        self.counter.add_css_class("changed-counter")
+        self.counter = Gtk.Label(label="")
         self.header.pack_end(self._menu_button())
         self.header.pack_end(self.counter)
 
-        chips = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        chips.set_margin_start(12)
-        chips.set_margin_end(12)
-        chips.set_margin_top(8)
-        self.filter_buttons: dict[str, Gtk.ToggleButton] = {}
-        for name, tooltip in FILTERS:
-            button = Gtk.ToggleButton(label=name)
-            button.add_css_class("pill")
-            button.set_tooltip_text(tooltip)
-            button.connect("toggled", self._on_filter, name)
-            chips.append(button)
-            self.filter_buttons[name] = button
 
         self.section_title = Gtk.Label(xalign=0)
         self.section_title.add_css_class("title-4")
@@ -200,7 +194,6 @@ class MainWindow(Adw.ApplicationWindow):
         self.grid_box.set_margin_bottom(12)
 
         body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        body.append(chips)
         body.append(heading)
         body.append(self.grid_box)
 
@@ -235,7 +228,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.revert_button = Gtk.Button(label="Discard changes")
         self.revert_button.add_css_class("flat")
-        self.revert_button.connect("clicked", lambda *_: self.staging.reset_to_baseline())
+        self.revert_button.connect("clicked", self._on_discard)
         footer.append(self.revert_button)
 
         self.review_button = Gtk.Button(label="Review")
@@ -248,6 +241,48 @@ class MainWindow(Adw.ApplicationWindow):
         footer.append(self.apply_button)
 
         return footer
+
+    def _build_filter_menu(self) -> Gtk.MenuButton:
+        """The filter chips, folded into one small button so they stay out of the way."""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        box.set_margin_top(6)
+        box.set_margin_bottom(6)
+        box.set_margin_start(6)
+        box.set_margin_end(6)
+
+        self.filter_buttons: dict[str, Gtk.CheckButton] = {}
+        for name, tooltip in FILTERS:
+            check = Gtk.CheckButton(label=name)
+            check.set_tooltip_text(tooltip)
+            check.connect("toggled", self._on_filter, name)
+            box.append(check)
+            self.filter_buttons[name] = check
+
+        clear = Gtk.Button(label="Clear filters")
+        clear.add_css_class("flat")
+        clear.set_margin_top(4)
+        clear.connect("clicked", self._on_clear_filters)
+        box.append(clear)
+
+        popover = Gtk.Popover(child=box)
+        self.filter_button = Gtk.MenuButton(popover=popover)
+        # Not "funnel-symbolic" — that one is missing from the icon theme here
+        # and renders as the broken-image glyph.
+        self.filter_button.set_icon_name("view-sort-descending-symbolic")
+        self.filter_button.set_tooltip_text("Filter which flags are shown")
+        return self.filter_button
+
+    def _on_clear_filters(self, _button: Gtk.Button) -> None:
+        for check in self.filter_buttons.values():
+            check.set_active(False)
+
+    def _refresh_filter_button(self) -> None:
+        count = len(self.active_filters)
+        self.filter_button.set_label(f"{count}" if count else "")
+        if count:
+            self.filter_button.add_css_class("suggested-action")
+        else:
+            self.filter_button.remove_css_class("suggested-action")
 
     def _menu_button(self) -> Gtk.MenuButton:
         menu = Gio.Menu()
@@ -335,6 +370,12 @@ class MainWindow(Adw.ApplicationWindow):
             section = self.catalogue.section(section_id)
             self.section_title.set_label(section.title)
             self.section_subtitle.set_label(section.desc)
+            if section_id == "ufw":
+                from .firewall import FirewallPage
+
+                self.grid_box.append(FirewallPage(self))
+                self._refresh_chrome()
+                return
             if not section.implemented:
                 self._show_pending(section)
                 return
@@ -519,11 +560,12 @@ class MainWindow(Adw.ApplicationWindow):
         self.search_text = entry.get_text().strip().lower()
         self._show_section(self.current_section)
 
-    def _on_filter(self, button: Gtk.ToggleButton, name: str) -> None:
+    def _on_filter(self, button: Gtk.CheckButton, name: str) -> None:
         if button.get_active():
             self.active_filters.add(name)
         else:
             self.active_filters.discard(name)
+        self._refresh_filter_button()
         self._show_section(self.current_section)
 
     # ------------------------------------------------------------------ #
@@ -537,9 +579,40 @@ class MainWindow(Adw.ApplicationWindow):
             header.refresh()
         self._refresh_chrome()
 
+    def firewall_changes(self) -> list[tuple[list[str], str]]:
+        """The ufw commands the staged firewall edits would run."""
+        if not self.firewall_dirty:
+            return []
+        try:
+            return ufw_module.plan_commands(self.firewall_baseline, self.firewall)
+        except ufw_module.UfwError:
+            return []
+
     def _refresh_chrome(self) -> None:
-        count = self.staging.changed_count
-        self.counter.set_label(f"{count} changed")
+        count = self.staging.changed_count + len(self.firewall_changes())
+        if count:
+            self.counter.set_label(f"{count} changed")
+            self.counter.add_css_class("changed-counter")
+            self.counter.remove_css_class("dim-label")
+            self.counter.set_tooltip_text(
+                "Changes staged but not yet written. Review shows the exact diff."
+            )
+        else:
+            # Nothing staged. Showing "0 changed" on a machine that is already
+            # heavily configured reads as "nothing is set", so show what is
+            # actually in effect instead.
+            in_effect = sum(
+                1
+                for state in self.states.values()
+                if state.state in (State.APPLIED, State.PENDING_REBOOT)
+            )
+            self.counter.set_label(f"{in_effect} in effect")
+            self.counter.remove_css_class("changed-counter")
+            self.counter.add_css_class("dim-label")
+            self.counter.set_tooltip_text(
+                "Settings already in effect on this machine, however they got "
+                "that way. Nothing is staged to change."
+            )
         self.apply_button.set_sensitive(count > 0)
         self.review_button.set_sensitive(count > 0)
         self.revert_button.set_sensitive(count > 0)
@@ -593,6 +666,12 @@ class MainWindow(Adw.ApplicationWindow):
     #  Actions
     # ------------------------------------------------------------------ #
 
+    def _on_discard(self, _button: Gtk.Button) -> None:
+        self.firewall = self.firewall_baseline.copy()
+        self.firewall_dirty = False
+        self.staging.reset_to_baseline()
+        self._show_section(self.current_section)
+
     def _on_review(self, _button: Gtk.Button) -> None:
         from .review import ReviewDialog
 
@@ -614,6 +693,14 @@ class MainWindow(Adw.ApplicationWindow):
         self.facts = probe.gather(self.catalogue)
         self.states = probe.all_states(self.catalogue, self.facts, self.staging.selection)
         self.staging.rebaseline(self.facts)
+        # Policies re-read from the readable files; rules keep whatever the last
+        # privileged read gave us rather than silently reverting to "unknown".
+        refreshed = ufw_module.read_unprivileged()
+        refreshed.rules = self.firewall.rules
+        refreshed.rules_loaded = self.firewall.rules_loaded
+        self.firewall = refreshed
+        self.firewall_baseline = refreshed.copy()
+        self.firewall_dirty = False
         self._show_section(self.current_section)
 
     def toast(self, message: str, timeout: int = 4) -> None:

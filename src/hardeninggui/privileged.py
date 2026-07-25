@@ -37,6 +37,8 @@ class ApplyOutcome:
     outcomes: dict[str, str] = field(default_factory=dict)
     needs_reboot: list[str] = field(default_factory=list)
     rolled_back: bool = False
+    #: Firewall state, populated by read_firewall().
+    firewall: dict = field(default_factory=dict)
     raw: str = ""
 
     @property
@@ -54,16 +56,39 @@ def _payload_dir() -> Path:
 
 
 def build_payload(
-    selection: dict[str, str], sections: list[str] | None = None
+    selection: dict[str, str],
+    sections: list[str] | None = None,
+    firewall: dict | None = None,
 ) -> dict:
     payload: dict = {"version": 1, "selection": dict(selection)}
     if sections is not None:
         payload["sections"] = list(sections)
+    if firewall is not None:
+        payload["ufw"] = firewall
     return payload
 
 
-def apply(selection: dict[str, str], sections: list[str] | None = None) -> ApplyOutcome:
+def read_firewall() -> ApplyOutcome:
+    """One privileged read of the firewall rules, writing nothing.
+
+    `ufw status` needs root and the rule files are root-only, so the rule list
+    cannot be shown without this. Policies and the enabled state come from
+    readable files and are already on screen before this runs.
+    """
+    return _invoke({"version": 1, "action": "read-firewall"})
+
+
+def apply(
+    selection: dict[str, str],
+    sections: list[str] | None = None,
+    firewall: dict | None = None,
+) -> ApplyOutcome:
     """Hand the selection to the helper through pkexec and parse the result."""
+    return _invoke(build_payload(selection, sections, firewall))
+
+
+def _invoke(payload: dict) -> ApplyOutcome:
+    """Write the payload somewhere private and run the helper under pkexec."""
     helper = paths.helper_path()
     if not Path(helper).exists():
         return ApplyOutcome(False, error=f"helper not installed at {helper}")
@@ -75,7 +100,7 @@ def apply(selection: dict[str, str], sections: list[str] | None = None) -> Apply
     payload_path = Path(name)
     try:
         with os.fdopen(handle, "w", encoding="utf-8") as stream:
-            json.dump(build_payload(selection, sections), stream)
+            json.dump(payload, stream)
         os.chmod(payload_path, stat.S_IRUSR | stat.S_IWUSR)
 
         try:
@@ -121,6 +146,7 @@ def _parse(stdout: str, stderr: str, returncode: int) -> ApplyOutcome:
         outcomes=dict(data.get("outcomes", {})),
         needs_reboot=list(data.get("needs_reboot", [])),
         rolled_back=bool(data.get("rolled_back", False)),
+        firewall=dict(data.get("ufw", {})),
         raw=stdout,
     )
 

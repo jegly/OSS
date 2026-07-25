@@ -25,7 +25,7 @@ import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from . import probe, render
+from . import probe, render, ufw as ufw_module
 from .catalogue import Catalogue
 from .render import ALLOWED_COMMANDS, Plan
 
@@ -56,6 +56,8 @@ class Result:
     error: str = ""
     rolled_back: bool = False
     needs_reboot: list[str] = field(default_factory=list)
+    #: Firewall state, for the read-only query the ufw page makes at open time.
+    ufw: dict = field(default_factory=dict)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
@@ -289,7 +291,12 @@ def _validate_auditd(write: render.FileWrite, result: Result) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def apply_plan(catalogue: Catalogue, plan: Plan, selection: dict[str, str]) -> Result:
+def apply_plan(
+    catalogue: Catalogue,
+    plan: Plan,
+    selection: dict[str, str],
+    firewall: "ufw_module.State | None" = None,
+) -> Result:
     """Run the whole transaction, rolling back on any failure."""
     result = Result()
 
@@ -329,6 +336,11 @@ def apply_plan(catalogue: Catalogue, plan: Plan, selection: dict[str, str]) -> R
             result.steps.append(Step("command", str(command), ok, output))
             if not ok:
                 raise ApplyError(f"{command} failed with exit {code}: {output}")
+
+        # 4. The firewall, last: its rules are the thing most likely to cut the
+        #    connection this session is running over.
+        if firewall is not None:
+            apply_firewall(firewall, result)
 
     except ApplyError as exc:
         result.ok = False
@@ -400,12 +412,61 @@ def read_back(
     return outcomes, needs_reboot
 
 
+def read_firewall() -> Result:
+    """Read-only: the firewall state, including the root-only rule list.
+
+    A separate action so the ufw page can load the current rules with one
+    authentication and without staging or writing anything.
+    """
+    result = Result()
+    state = ufw_module.read_unprivileged()
+    code, output = run([ufw_module.UFW_BIN, "status", "verbose"])
+    if code != 0:
+        result.ok = False
+        result.error = f"could not read the firewall: {output}"
+        return result
+    state.rules = ufw_module.parse_status(output)
+    state.rules_loaded = True
+    result.ufw = ufw_module.to_payload(state)
+    result.steps.append(Step("readback", f"read {len(state.rules)} firewall rule(s)"))
+    return result
+
+
+def apply_firewall(wanted: ufw_module.State, result: Result) -> None:
+    """Run the firewall commands, appending each to the report."""
+    current = ufw_module.read_unprivileged()
+    code, output = run([ufw_module.UFW_BIN, "status", "verbose"])
+    if code == 0:
+        current.rules = ufw_module.parse_status(output)
+        current.rules_loaded = True
+
+    for argv, why in ufw_module.plan_commands(current, wanted):
+        code, output = run(argv)
+        ok = code == 0
+        result.steps.append(Step("command", " ".join(argv), ok, output))
+        if not ok:
+            raise ApplyError(f"{why} failed: {output}")
+
+
 def run_payload(catalogue: Catalogue, payload: dict) -> Result:
     """Validate a payload, render the plan ourselves, and run it."""
+    action = payload.get("action", "apply")
+    if action == "read-firewall":
+        return read_firewall()
+    if action != "apply":
+        return Result(ok=False, error=f"unknown action {action!r}")
+
     try:
         selection = validate_payload(catalogue, payload)
     except ApplyError as exc:
         return Result(ok=False, error=str(exc))
+
+    wanted_firewall = None
+    if "ufw" in payload:
+        try:
+            wanted_firewall = ufw_module.from_payload(payload["ufw"])
+        except ufw_module.UfwError as exc:
+            return Result(ok=False, error=f"bad firewall payload: {exc}")
 
     sections = payload.get("sections")
     current = probe.read_target_files(catalogue)
@@ -414,7 +475,7 @@ def run_payload(catalogue: Catalogue, payload: dict) -> Result:
     except render.RenderError as exc:
         return Result(ok=False, error=f"could not build the plan: {exc}")
 
-    if plan.is_empty:
+    if plan.is_empty and wanted_firewall is None:
         return Result(ok=True, error="", steps=[Step("write", "nothing to do", True)])
 
-    return apply_plan(catalogue, plan, selection)
+    return apply_plan(catalogue, plan, selection, wanted_firewall)
