@@ -54,6 +54,11 @@ def main() -> int:
         default=True,
         help="also install the SVG source as scalable/ (default when given an SVG)",
     )
+    parser.add_argument(
+        "--no-upscale",
+        action="store_true",
+        help="skip sizes larger than the source instead of upscaling to them",
+    )
     args = parser.parse_args()
 
     source = Path(args.source).expanduser()
@@ -75,17 +80,19 @@ def main() -> int:
             f"crop it first if that matters.",
             file=sys.stderr,
         )
-    if source.suffix.lower() != ".svg" and min(width, height) < 256:
+    if source.suffix.lower() != ".svg" and min(width, height) < max(SIZES):
         print(
-            f"  note: {min(width, height)}px source. The 256 and 512 sizes will be "
-            f"upscaled and look soft; an SVG or a larger PNG would be better.",
+            f"  note: {min(width, height)}px source, so sizes above that are "
+            f"upscaled. They are still generated: without a 512 the shell upscales "
+            f"the 256 itself for HiDPI, with a cheaper filter than this uses. An "
+            f"SVG or a larger source would beat both.",
             file=sys.stderr,
         )
 
     written = []
     for size in SIZES:
-        if source.suffix.lower() != ".svg" and size > max(width, height) * 2:
-            continue  # refuse to invent detail that far beyond the source
+        if args.no_upscale and source.suffix.lower() != ".svg" and size > max(width, height):
+            continue
         directory = ICON_ROOT / f"{size}x{size}" / "apps"
         directory.mkdir(parents=True, exist_ok=True)
         destination = directory / f"{APP_ID}.png"
