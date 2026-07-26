@@ -87,7 +87,7 @@ class AppearanceDialog(Adw.PreferencesWindow):
             title="Text",
             description="Fonts are independent of the theme — any face pairs with any palette.",
         )
-        self.fonts = theme_module.BUNDLED_FONTS
+        self.fonts = theme_module.available_fonts()
         self.font_row = Adw.ComboRow(
             title="Font",
             model=Gtk.StringList.new([name for _, name, _ in self.fonts]),

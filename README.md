@@ -86,9 +86,34 @@ Build it yourself:
 ./tools/packaging-gate.sh
 ```
 
+The bundled typefaces are a separate package, because 17MB of TTFs would be most
+of the main package's size for something optional:
+
+```
+sudo dpkg -i hardening-gui-fonts_0.1.0_all.deb
+```
+
+Without it the app uses the system font and the picker simply does not list the
+faces that are missing.
+
 Optional tools unlock extra sections and are never hard dependencies:
 `auditd`, `usbguard`, `debsums`, `apparmor-utils`, `openssh-server`. Each section
 detects absence and says which package it needs.
+
+## Capture
+
+**Capture this system** reads the effective configuration — the merged sysctl
+chain and the live kernel values, not the files — maps it onto the catalogue, and
+reports what it found before saving anything. On the reference machine that is
+242 settings and nine findings worth acting on.
+
+Reading the effective state rather than copying files is the point: a
+hand-hardened machine accumulates keys that have never done anything.
+`kernel.exec-shield` and `security.bprm_checkIP` were both sitting in the
+reference machine's config, and neither has existed in a kernel for years.
+Copying the files forward carries the mistakes; capturing and validating does
+not. Settings in effect that the app does not manage are recorded as custom
+entries rather than silently dropped.
 
 ## Appearance
 

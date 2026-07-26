@@ -138,11 +138,11 @@ class HardeningApplication(Adw.Application):
         )
 
     def _on_capture(self, *_args) -> None:
-        if self.window is None:
+        if self.window is None or self.catalogue is None:
             return
-        self.window.toast(
-            "Capture is not built yet — it needs the normaliser from BUILD_PLAN §5.2."
-        )
+        from .capture_dialog import CaptureDialog
+
+        CaptureDialog(self.window).present()
 
     def _on_save_preset(self, *_args) -> None:
         if self.window is None or self.catalogue is None:

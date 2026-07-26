@@ -16,6 +16,7 @@ Stdlib only — no gi. The UI layer feeds the output to a ``Gtk.CssProvider``.
 
 from __future__ import annotations
 
+import os
 import tomllib
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -415,6 +416,49 @@ def font_family(settings: Settings) -> str:
         if key == settings.font and family:
             return family
     return ""
+
+
+def _font_dirs() -> list[Path]:
+    home = Path(os.path.expanduser("~"))
+    return [
+        Path("/usr/share/fonts/hardening-gui"),
+        Path("/usr/local/share/fonts"),
+        Path("/usr/share/fonts"),
+        home / ".local/share/fonts",
+        home / ".fonts",
+    ]
+
+
+@lru_cache(maxsize=1)
+def available_fonts() -> list[tuple[str, str, str]]:
+    """Only offer fonts that are actually installed.
+
+    The bundled faces ship in a separate package, because 17MB of TTFs in the
+    main one would be most of its size for something optional. A picker that
+    lists faces the system does not have would silently fall back to the default
+    and look like a bug, so absent families are left out instead.
+    """
+    installed: set[str] = set()
+    for directory in _font_dirs():
+        if not directory.is_dir():
+            continue
+        try:
+            for path in directory.rglob("*.tt[fc]"):
+                installed.add(path.stem.lower().replace("-", "_").replace(" ", "_"))
+            for path in directory.rglob("*.otf"):
+                installed.add(path.stem.lower().replace("-", "_").replace(" ", "_"))
+        except OSError:
+            continue
+
+    out = []
+    for key, label, family in BUNDLED_FONTS:
+        if not family:
+            out.append((key, label, family))  # the system default, always there
+            continue
+        stem = family.lower().replace(" ", "_")
+        if any(name.startswith(stem) or name.startswith(key) for name in installed):
+            out.append((key, label, family))
+    return out
 
 
 # --------------------------------------------------------------------------- #
