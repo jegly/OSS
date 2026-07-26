@@ -234,7 +234,7 @@ class MainWindow(Adw.ApplicationWindow):
         footer.set_margin_top(8)
         footer.set_margin_bottom(8)
 
-        lock = Gtk.Label(label="\U0001f512 asks for password")
+        lock = Gtk.Label(label="Asks for your password")
         lock.add_css_class("lock-hint")
         footer.append(lock)
 

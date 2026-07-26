@@ -17,17 +17,13 @@ from dataclasses import dataclass, field
 from . import probe
 from .catalogue import Catalogue, Flag, Section
 
-BANNER = (
-    "# Managed by OSS. Do not edit by hand.\n"
-    "# Delete this file to revert this section to stock.\n"
-)
+from . import branding
+
+BANNER = branding.DROPIN
 
 #: For targets that are pre-existing system files rather than drop-ins we own.
 #: Deleting one of these does not revert anything — restoring the .bak does.
-IN_PLACE_BANNER = (
-    "# Managed by OSS. Do not edit by hand.\n"
-    "# The original file was saved alongside this one as .bak — restore it to revert.\n"
-)
+IN_PLACE_BANNER = branding.IN_PLACE
 
 #: Commands the helper is allowed to run. Anything else is rejected, so a
 #: tampered payload cannot turn the helper into a shell.

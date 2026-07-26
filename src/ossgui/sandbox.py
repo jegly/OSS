@@ -17,16 +17,15 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import branding
 from .units import _UNIT_NAME  # the same strict unit-name grammar
 
 ANALYZE = "/usr/bin/systemd-analyze"
 DROPIN_NAME = "99-oss.conf"
 
-BANNER = (
-    "# Managed by OSS. Do not edit by hand.\n"
-    "# Delete this file to revert this unit to stock.\n"
-    "[Service]\n"
-)
+BANNER = branding.with_footer(
+    "Delete this file and run systemctl daemon-reload to revert this unit."
+) + "[Service]\n"
 
 
 class SandboxError(ValueError):

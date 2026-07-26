@@ -15,6 +15,8 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
+
+from . import branding
 from pathlib import Path
 
 USBGUARD = "/usr/sbin/usbguard"
@@ -172,10 +174,11 @@ def generate_rules(devices: list[Device]) -> str:
         raise UsbError("there are no devices to build a policy from")
 
     lines = [
-        "# Managed by OSS. Generated from the devices connected at the",
-        "# time it was written. Anything not listed here is blocked.",
-        "#",
-        "# Delete this file and restart usbguard to remove the policy.",
+        branding.with_footer(
+            "Generated from the devices connected when it was written.\n"
+            "Anything not listed here is blocked.\n"
+            "Delete this file and restart usbguard to remove the policy."
+        ).rstrip("\n"),
         "",
     ]
     ordered = sorted(devices, key=lambda d: (not d.is_hid, d.device_id))

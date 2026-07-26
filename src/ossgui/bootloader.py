@@ -16,6 +16,8 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
+
+from . import branding
 from pathlib import Path
 
 MKPASSWD = "/usr/bin/grub-mkpasswd-pbkdf2"
@@ -192,9 +194,10 @@ def render_script(username: str, digest: str) -> str:
     validate_hash(digest)
     return (
         "#!/bin/sh\n"
-        "# Managed by OSS. Do not edit by hand.\n"
-        "# Delete this file and run update-grub to remove the boot password.\n"
-        "#\n"
+        + branding.with_footer(
+            "Delete this file and run update-grub to remove the boot password."
+        )
+        + "#\n"
         "# `superusers` may edit menu entries and reach the GRUB command line.\n"
         "# Menu entries stay bootable without a password because 10_linux marks\n"
         "# them --unrestricted; only editing them is gated.\n"
