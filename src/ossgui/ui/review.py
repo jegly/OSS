@@ -405,11 +405,15 @@ class ApplyProgressDialog(Adw.Window):
     def __init__(self, window) -> None:
         super().__init__(
             transient_for=window, modal=True, title="Applying",
-            default_width=760, default_height=560,
+            default_width=820, default_height=680,
         )
         mark_solid(self)
         self.window = window
         self.outcome: privileged.ApplyOutcome | None = None
+        #: The buttons live in a bottom bar; showing a result twice would stack a
+        #: second one, so the bar is kept and replaced rather than appended to.
+        self._button_bar: Gtk.Widget | None = None
+        self._settled = False
 
         self.status = Adw.StatusPage(
             title="Waiting for authentication",
@@ -466,49 +470,121 @@ class ApplyProgressDialog(Adw.Window):
         GLib.idle_add(self._finish, outcome, user_results)
 
     def _finish(self, outcome: privileged.ApplyOutcome, user_results: list) -> bool:
+        if self._settled:
+            return False
+        self._settled = True
         self.outcome = outcome
         self.spinner.stop()
 
         if outcome.cancelled:
-            self.status.set_icon_name("action-unavailable-symbolic")
-            self.status.set_title("Cancelled")
-            self.status.set_description("Nothing was changed.")
-            self.status.set_child(self._close_button())
+            self._show_result(
+                "action-unavailable-symbolic", "Cancelled", "Nothing was changed.",
+                outcome, user_results, reboot=False,
+            )
             return False
 
         if not outcome.ok:
-            self.status.set_icon_name("dialog-error-symbolic")
-            self.status.set_title("Apply failed")
             detail = outcome.error or "The helper reported a failure."
             if outcome.rolled_back:
-                detail += "\n\nEvery file was restored from its backup, so the system is as it was."
-            self.status.set_description(detail)
-            self.status.set_child(self._details_view(outcome, user_results))
+                detail += (
+                    "  Every file was restored from its backup, so the system is "
+                    "as it was."
+                )
+            self._show_result(
+                "dialog-error-symbolic", "Apply failed", detail,
+                outcome, user_results, reboot=False,
+            )
             return False
 
         applied = sum(1 for v in outcome.outcomes.values() if v == "applied")
         pending = len(outcome.needs_reboot)
         failed = outcome.failed_flags
 
-        self.status.set_icon_name(
-            "dialog-warning-symbolic" if failed else "emblem-ok-symbolic"
-        )
-        self.status.set_title("Applied")
         parts = [f"{applied} in effect now"]
         if pending:
             parts.append(f"{pending} waiting for a reboot")
         if failed:
             parts.append(f"{len(failed)} did not take")
-        self.status.set_description(" · ".join(parts))
-        self.status.set_child(self._details_view(outcome, user_results))
+
+        self._show_result(
+            "dialog-warning-symbolic" if failed else "emblem-ok-symbolic",
+            "Applied",
+            " · ".join(parts),
+            outcome,
+            user_results,
+            reboot=bool(pending),
+        )
 
         self.window.refresh_from_system()
-        if pending:
-            self.window.toast(f"{pending} change(s) take effect after a reboot.")
         return False
 
+    def _show_result(
+        self,
+        icon: str,
+        title: str,
+        description: str,
+        outcome: privileged.ApplyOutcome,
+        user_results: list,
+        reboot: bool,
+    ) -> None:
+        """Swap the spinner for the outcome, with the log given the window height.
+
+        Deliberately not an Adw.StatusPage with the log as its child: a status page
+        sizes itself around a short message, so a scrollable list put inside it gets
+        squeezed into whatever vertical space is left over — which was a few lines.
+        A compact banner plus a scroller that expands, and the buttons in a bottom
+        bar where they cannot be scrolled away from.
+        """
+        banner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        banner.set_margin_top(14)
+        banner.set_margin_bottom(4)
+        banner.set_margin_start(14)
+        banner.set_margin_end(14)
+
+        image = Gtk.Image.new_from_icon_name(icon)
+        image.set_pixel_size(40)
+        image.set_valign(Gtk.Align.START)
+        banner.append(image)
+
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, hexpand=True)
+        heading = Gtk.Label(label=title, xalign=0)
+        heading.add_css_class("title-2")
+        text.append(heading)
+        subtitle = Gtk.Label(label=description, xalign=0, wrap=True)
+        subtitle.add_css_class("dim-label")
+        text.append(subtitle)
+        banner.append(text)
+
+        body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        body.append(banner)
+        body.append(self._details_view(outcome, user_results))
+
+        self.toolbar.set_content(body)
+        if self._button_bar is not None:
+            self.toolbar.remove(self._button_bar)
+        self._button_bar = self._buttons(reboot)
+        self.toolbar.add_bottom_bar(self._button_bar)
+        self.set_title(title)
+
+    def _buttons(self, reboot: bool) -> Gtk.Widget:
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        box.set_margin_start(12)
+        box.set_margin_end(12)
+        box.set_margin_top(8)
+        box.set_margin_bottom(8)
+        box.append(Gtk.Box(hexpand=True))
+        if reboot:
+            button = Gtk.Button(label="Reboot now")
+            button.add_css_class("suggested-action")
+            button.connect("clicked", self._on_reboot)
+            box.append(button)
+        close = Gtk.Button(label="Close")
+        close.connect("clicked", lambda *_: self.close())
+        box.append(close)
+        return box
+
     def _details_view(self, outcome: privileged.ApplyOutcome, user_results: list) -> Gtk.Widget:
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        page = Adw.PreferencesPage()
 
         if outcome.failed_flags:
             group = Adw.PreferencesGroup(
@@ -524,38 +600,41 @@ class ApplyProgressDialog(Adw.Window):
                         f"{flag.key if flag else ''} — {outcome.outcomes[flag_id]}",
                     )
                 )
-            box.append(group)
+            page.add(group)
 
-        for command, ok, output in user_results:
-            if not ok:
-                group = Adw.PreferencesGroup(title="A desktop setting failed")
+        if outcome.needs_reboot:
+            group = Adw.PreferencesGroup(
+                title=f"{len(outcome.needs_reboot)} change(s) waiting for a reboot",
+                description="Written to disk, but not in effect until you restart.",
+            )
+            for flag_id in outcome.needs_reboot[:20]:
+                flag = self.window.catalogue.get(flag_id)
+                group.add(ReviewDialog._row(flag.title if flag else flag_id,
+                                            flag.key if flag else ""))
+            page.add(group)
+
+        failed_user = [(c, o) for c, ok, o in user_results if not ok]
+        if failed_user:
+            group = Adw.PreferencesGroup(title="Desktop settings that failed")
+            for command, output in failed_user:
                 group.add(ReviewDialog._row(command, output))
-                box.append(group)
+            page.add(group)
 
-        steps = Adw.PreferencesGroup(title="What the helper did")
+        steps = Adw.PreferencesGroup(
+            title="What the helper did",
+            description=f"{len(outcome.steps)} step(s), in order.",
+        )
         for step in outcome.steps:
             title = f"{step.get('kind', '?')}: {step.get('detail', '')}"
             subtitle = step.get("output", "")
             if not step.get("ok", True):
                 subtitle = f"FAILED — {subtitle}"
             steps.add(ReviewDialog._row(title, subtitle))
-        box.append(steps)
+        page.add(steps)
 
-        buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8, halign=Gtk.Align.CENTER)
-        if outcome.needs_reboot:
-            reboot = Gtk.Button(label="Reboot now")
-            reboot.add_css_class("suggested-action")
-            reboot.connect("clicked", self._on_reboot)
-            buttons.append(reboot)
-        buttons.append(self._close_button())
-        box.append(buttons)
-
-        return ReviewDialog._as_scroller(box)
-
-    def _close_button(self) -> Gtk.Widget:
-        button = Gtk.Button(label="Close", halign=Gtk.Align.CENTER)
-        button.connect("clicked", lambda *_: self.close())
-        return button
+        scroller = Gtk.ScrolledWindow(child=page, vexpand=True)
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        return scroller
 
     def _on_reboot(self, _button: Gtk.Button) -> None:
         # Ask the session to reboot rather than calling systemctl ourselves: the
