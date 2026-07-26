@@ -92,8 +92,20 @@ class TestPayloadValidation(SandboxCase):
             )
 
     def test_rejects_a_section_this_build_cannot_apply(self) -> None:
-        pending = [s for s in self.catalogue.sections if not s.implemented]
-        self.assertTrue(pending, "expected at least one not-yet-built section")
+        """A section marked unimplemented must not be applicable.
+
+        Every shipped section is implemented now, so this marks one as not-built
+        to check the guard itself rather than asserting on which sections happen
+        to be finished.
+        """
+        section = self.catalogue.section("sysctl")
+        section.implemented = False
+        self.addCleanup(setattr, section, "implemented", True)
+
+        with self.assertRaises(apply.ApplyError):
+            apply.validate_payload(
+                self.catalogue, {"version": 1, "selection": {"kptr_restrict": "2"}}
+            )
 
     def test_accepts_a_well_formed_selection(self) -> None:
         selection = apply.validate_payload(

@@ -26,7 +26,12 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from . import apparmor as apparmor_module
+from . import bootloader as bootloader_module
+from . import fstab as fstab_module
+from . import permissions as permissions_module
 from . import probe, render, ufw as ufw_module, units as units_module
+from . import sandbox as sandbox_module
+from . import usb as usb_module
 from .catalogue import Catalogue
 from .render import ALLOWED_COMMANDS, Plan
 
@@ -306,6 +311,7 @@ def apply_plan(
     firewall: "ufw_module.State | None" = None,
     unit_changes: dict[str, str] | None = None,
     apparmor_changes: dict[str, str] | None = None,
+    extras: dict | None = None,
 ) -> Result:
     """Run the whole transaction, rolling back on any failure."""
     result = Result()
@@ -346,6 +352,18 @@ def apply_plan(
             result.steps.append(Step("command", str(command), ok, output))
             if not ok:
                 raise ApplyError(f"{command} failed with exit {code}: {output}")
+
+        extras = extras or {}
+        if "sandbox" in extras:
+            apply_sandbox(extras["sandbox"], result)
+        if "permissions" in extras:
+            apply_permissions(extras["permissions"], result)
+        if "bootloader" in extras:
+            apply_bootloader(extras["bootloader"], result)
+        if "fstab" in extras:
+            apply_fstab(extras["fstab"], result)
+        if "usb" in extras:
+            apply_usb(extras["usb"], result)
 
         # 4. AppArmor profile modes, which are symlinks plus a parser reload.
         if apparmor_changes:
@@ -553,6 +571,159 @@ def integrity_verify() -> Result:
     return result
 
 
+def apply_sandbox(changes: dict[str, list[str]], result: Result) -> None:
+    """Write or remove per-unit drop-ins, then reload systemd (§4.12)."""
+    touched = False
+    for change in sandbox_module.plan_changes(changes):
+        path = target_path(change.path)
+        if change.removing:
+            if path.exists():
+                backup(path)
+                path.unlink()
+                result.steps.append(Step("remove", change.path))
+                touched = True
+            continue
+        backup(path)
+        write_atomic(path, change.content, 0o644)
+        result.steps.append(Step("write", change.path))
+        touched = True
+
+    if touched:
+        code, output = run(["/usr/bin/systemctl", "daemon-reload"])
+        result.steps.append(Step("command", "systemctl daemon-reload", code == 0, output))
+        if code != 0:
+            raise ApplyError(f"daemon-reload failed: {output}")
+
+
+def apply_bootloader(payload: dict, result: Result) -> None:
+    """Install or remove the GRUB superuser password script (§4.23)."""
+    path = target_path(bootloader_module.PASSWORD_SCRIPT)
+    parsed = bootloader_module.from_payload(payload)
+
+    if parsed is None:
+        if path.exists():
+            backup(path)
+            path.unlink()
+            result.steps.append(Step("remove", bootloader_module.PASSWORD_SCRIPT))
+        else:
+            return
+    else:
+        username, digest = parsed
+        backup(path)
+        # 0700: the file contains a password hash, and grub.d scripts are executed.
+        write_atomic(path, bootloader_module.render_script(username, digest), 0o700)
+        result.steps.append(Step("write", bootloader_module.PASSWORD_SCRIPT))
+
+    code, output = run(["/usr/sbin/update-grub"])
+    result.steps.append(Step("command", "update-grub", code == 0, output))
+    if code != 0:
+        raise ApplyError(f"update-grub failed: {output}")
+
+
+def apply_permissions(changes: list, result: Result) -> None:
+    """chmod/chown with a rollback journal, because there is no file to delete."""
+    import json as json_module
+
+    journal_path = target_path(str(permissions_module.JOURNAL_PATH))
+    journal: list[dict] = []
+    try:
+        journal = json_module.loads(journal_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        journal = []
+
+    for change in changes:
+        path = target_path(change.path)
+        if not path.exists():
+            result.steps.append(Step("write", f"{change.path} does not exist", False, "skipped"))
+            continue
+        stat = path.lstat()
+        change.before_mode = stat.st_mode & 0o7777
+
+        # Record the before-state *first*: if the chmod succeeds and something
+        # later fails, the journal is what makes undo possible at all.
+        journal.append({
+            "path": change.path,
+            "before_mode": change.before_mode,
+            "before_uid": stat.st_uid,
+            "before_gid": stat.st_gid,
+            "after_mode": change.mode,
+        })
+        journal_path.parent.mkdir(parents=True, exist_ok=True)
+        write_atomic(journal_path, json_module.dumps(journal, indent=1), 0o600)
+
+        os.chmod(path, change.mode)
+        result.steps.append(
+            Step("write", f"{change.path}: {change.before_mode:04o} -> {change.mode:04o}")
+        )
+
+        if change.owner or change.group:
+            import grp as grp_module
+            import pwd as pwd_module
+
+            uid = pwd_module.getpwnam(change.owner).pw_uid if change.owner else -1
+            gid = grp_module.getgrnam(change.group).gr_gid if change.group else -1
+            os.chown(path, uid, gid)
+            result.steps.append(
+                Step("write", f"{change.path}: owner -> {change.owner}:{change.group}")
+            )
+
+
+def apply_fstab(changes: dict[str, set[str]], result: Result) -> None:
+    """Test every option set with a live remount before touching fstab (§4.10).
+
+    This is the whole safety story for this section: an option combination the
+    kernel rejects fails here, with the filesystem still mounted as it was,
+    rather than at boot with no way to fix it.
+    """
+    path = target_path(fstab_module.FSTAB)
+    try:
+        current = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ApplyError(f"cannot read {fstab_module.FSTAB}: {exc}") from exc
+
+    entries = {e.mount: e for e in fstab_module.parse(current)}
+    for mount, options in changes.items():
+        entry = entries.get(mount)
+        if entry is None:
+            raise ApplyError(f"no fstab entry for {mount}")
+        argv = fstab_module.remount_argv(mount, options, entry)
+        code, output = run(argv)
+        result.steps.append(Step("validate", " ".join(argv), code == 0, output))
+        if code != 0:
+            raise ApplyError(
+                f"{mount} could not be remounted with those options, so fstab was "
+                f"not touched: {output}"
+            )
+
+    backup(path)
+    write_atomic(path, fstab_module.render_fstab(current, changes), 0o644)
+    result.steps.append(Step("write", fstab_module.FSTAB))
+
+
+def apply_usb(payload: dict, result: Result) -> None:
+    """Write the USBGuard policy, and only then consider enabling it (§4.18)."""
+    parsed = usb_module.from_payload(payload)
+
+    rules_path = target_path(usb_module.RULES_PATH)
+    backup(rules_path)
+    write_atomic(rules_path, parsed["rules"], 0o600)
+    result.steps.append(Step("write", usb_module.RULES_PATH))
+
+    config_path = target_path(usb_module.CONFIG_PATH)
+    backup(config_path)
+    write_atomic(config_path, usb_module.daemon_config(parsed["implicit"]), 0o600)
+    result.steps.append(Step("write", usb_module.CONFIG_PATH))
+
+    if parsed["enable"]:
+        for argv in (
+            ["/usr/bin/systemctl", "enable", "--now", "usbguard.service"],
+        ):
+            code, output = run(argv)
+            result.steps.append(Step("command", " ".join(argv), code == 0, output))
+            if code != 0:
+                raise ApplyError(f"could not start usbguard: {output}")
+
+
 def apply_apparmor(changes: dict[str, str], result: Result) -> None:
     """Set profile modes by managing the symlinks, then reloading each profile."""
     for change in apparmor_module.plan_changes(changes):
@@ -631,6 +802,26 @@ def run_payload(catalogue: Catalogue, payload: dict) -> Result:
         except units_module.UnitError as exc:
             return Result(ok=False, error=f"bad units payload: {exc}")
 
+    extras: dict[str, object] = {}
+    parsers = {
+        "sandbox": (sandbox_module.from_payload, sandbox_module.SandboxError),
+        "permissions": (permissions_module.from_payload, permissions_module.PermissionError_),
+        "fstab": (fstab_module.from_payload, fstab_module.FstabError),
+        "usb": (usb_module.from_payload, usb_module.UsbError),
+    }
+    for key, (parser, error_type) in parsers.items():
+        if key in payload:
+            try:
+                extras[key] = parser(payload[key])
+            except error_type as exc:
+                return Result(ok=False, error=f"bad {key} payload: {exc}")
+    if "bootloader" in payload:
+        try:
+            bootloader_module.from_payload(payload["bootloader"])
+        except bootloader_module.BootloaderError as exc:
+            return Result(ok=False, error=f"bad bootloader payload: {exc}")
+        extras["bootloader"] = payload["bootloader"]
+
     apparmor_changes: dict[str, str] = {}
     if "apparmor" in payload:
         try:
@@ -650,9 +841,10 @@ def run_payload(catalogue: Catalogue, payload: dict) -> Result:
         and wanted_firewall is None
         and not unit_changes
         and not apparmor_changes
+        and not extras
     ):
         return Result(ok=True, error="", steps=[Step("write", "nothing to do", True)])
 
     return apply_plan(
-        catalogue, plan, selection, wanted_firewall, unit_changes, apparmor_changes
+        catalogue, plan, selection, wanted_firewall, unit_changes, apparmor_changes, extras
     )

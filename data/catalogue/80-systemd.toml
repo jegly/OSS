@@ -6,6 +6,5 @@ title       = "systemd"
 nav         = "Monitoring"
 order       = 80
 syntax      = "special"
-implemented = false
 plan_ref    = "§4.12"
 desc        = "Per-unit drop-ins with the Protect*/Restrict*/Private* directive set, chosen per service rather than globally. Shows `systemd-analyze security <unit>` before and after, which is the built-in feedback loop for this section. MemoryDenyWriteExecute breaks anything with a JIT; ProtectSystem=strict breaks services that write outside their state directory."

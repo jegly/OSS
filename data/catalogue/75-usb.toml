@@ -6,7 +6,6 @@ title       = "usb"
 nav         = "Access"
 order       = 75
 syntax      = "special"
-implemented = false
 plan_ref    = "§4.18"
 requires_pkg = "usbguard"
 desc        = "USBGuard policy generated from currently-connected devices, authorized_default, Thunderbolt/boltctl policy, and wake-on-USB/LAN. The allowlist must be generated before enforcement is enabled or you lose your keyboard — the app refuses to enable a policy that contains no HID device."

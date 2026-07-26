@@ -75,6 +75,16 @@ class MainWindow(Adw.ApplicationWindow):
         self.apparmor_changes: dict[str, str] = {}
         #: Last integrity result, so the page survives a rebuild.
         self.integrity_result: dict = {}
+        #: unit -> list of sandbox directive keys.
+        self.sandbox_changes: dict[str, list[str]] = {}
+        #: path -> {"mode", "owner", "group"}.
+        self.permission_changes: dict[str, dict] = {}
+        #: mount point -> list of options.
+        self.fstab_changes: dict[str, list[str]] = {}
+        #: {"username", "hash"} or {"remove": True}.
+        self.bootloader_change: dict = {}
+        #: The staged USBGuard policy.
+        self.usb_change: dict = {}
 
         self.states = probe.all_states(catalogue, facts, staging.selection)
         self.unaffected = probe.unaffected_mitigations(catalogue, facts)
@@ -385,6 +395,21 @@ class MainWindow(Adw.ApplicationWindow):
                 self.grid_box.append(FirewallPage(self))
                 self._refresh_chrome()
                 return
+            if section_id in ("systemd", "bootloader", "permissions", "fstab", "usb"):
+                from .pages import (
+                    BootloaderPage, FstabPage, PermissionsPage, SandboxPage, UsbPage,
+                )
+
+                page = {
+                    "systemd": SandboxPage,
+                    "bootloader": BootloaderPage,
+                    "permissions": PermissionsPage,
+                    "fstab": FstabPage,
+                    "usb": UsbPage,
+                }[section_id]
+                self.grid_box.append(page(self))
+                self._refresh_chrome()
+                return
             if section_id == "apparmor":
                 from .apparmor_page import ApparmorPage
 
@@ -606,6 +631,21 @@ class MainWindow(Adw.ApplicationWindow):
             header.refresh()
         self._refresh_chrome()
 
+    def extras_payload(self) -> dict:
+        """The staged state of the sections that are not flag grids."""
+        extras: dict = {}
+        if self.sandbox_changes:
+            extras["sandbox"] = dict(self.sandbox_changes)
+        if self.permission_changes:
+            extras["permissions"] = dict(self.permission_changes)
+        if self.fstab_changes:
+            extras["fstab"] = dict(self.fstab_changes)
+        if self.bootloader_change:
+            extras["bootloader"] = dict(self.bootloader_change)
+        if self.usb_change:
+            extras["usb"] = dict(self.usb_change)
+        return extras
+
     def firewall_changes(self) -> list[tuple[list[str], str]]:
         """The ufw commands the staged firewall edits would run."""
         if not self.firewall_dirty:
@@ -621,6 +661,11 @@ class MainWindow(Adw.ApplicationWindow):
             + len(self.firewall_changes())
             + len(self.unit_changes)
             + len(self.apparmor_changes)
+            + len(self.sandbox_changes)
+            + len(self.permission_changes)
+            + len(self.fstab_changes)
+            + len(self.usb_change)
+            + (1 if self.bootloader_change else 0)
         )
         if count:
             self.counter.set_label(f"{count} changed")
@@ -704,6 +749,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.unit_changes.clear()
         self.apparmor_changes.clear()
         self.apparmor = apparmor_module.read_unprivileged()
+        for staged in (self.sandbox_changes, self.permission_changes,
+                       self.fstab_changes, self.bootloader_change, self.usb_change):
+            staged.clear()
         self.apparmor_changes.clear()
         self.staging.reset_to_baseline()
         self._show_section(self.current_section)

@@ -300,6 +300,24 @@ class ReviewDialog(Adw.Window):
             root.add(self._row("none", ""))
         page.add(root)
 
+        extras = self.window.extras_payload()
+        if extras:
+            group = Adw.PreferencesGroup(
+                title="Other sections",
+                description="Each of these is validated again by the helper before anything runs.",
+            )
+            labels = {
+                "sandbox": "systemd unit drop-in",
+                "permissions": "permission change",
+                "fstab": "mount option change (remount-tested first)",
+                "bootloader": "boot password",
+                "usb": "USB policy",
+            }
+            for key, value in extras.items():
+                count = len(value) if isinstance(value, dict) else 1
+                group.add(self._row(f"{count} {labels[key]}(s)", ", ".join(map(str, value))[:200]))
+            page.add(group)
+
         if self.window.apparmor_changes:
             group = Adw.PreferencesGroup(
                 title="AppArmor",
@@ -394,9 +412,10 @@ class ApplyProgressDialog(Adw.Window):
         )
         unit_changes = dict(self.window.unit_changes)
         apparmor_changes = dict(self.window.apparmor_changes)
+        extras = self.window.extras_payload()
         thread = threading.Thread(
             target=self._worker,
-            args=(selection, firewall, unit_changes, apparmor_changes),
+            args=(selection, firewall, unit_changes, apparmor_changes, extras),
             daemon=True,
         )
         thread.start()
@@ -407,12 +426,14 @@ class ApplyProgressDialog(Adw.Window):
         firewall: dict | None,
         unit_changes: dict,
         apparmor_changes: dict,
+        extras: dict,
     ) -> None:
         outcome = privileged.apply(
             selection,
             firewall=firewall,
             unit_changes=unit_changes,
             apparmor_changes=apparmor_changes,
+            extras=extras,
         )
         user_results = []
         if outcome.ok:
