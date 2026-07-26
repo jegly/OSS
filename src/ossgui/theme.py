@@ -427,7 +427,11 @@ def font_family(settings: Settings) -> str:
 def _font_dirs() -> list[Path]:
     home = Path(os.path.expanduser("~"))
     return [
+        # Where the package installs the bundled faces.
         Path("/usr/share/fonts/oss"),
+        # The same faces in the source tree, so running from a checkout offers
+        # the same list as an installed copy rather than silently fewer.
+        paths.data_dir() / "fonts",
         Path("/usr/local/share/fonts"),
         Path("/usr/share/fonts"),
         home / ".local/share/fonts",

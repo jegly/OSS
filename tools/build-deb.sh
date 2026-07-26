@@ -18,6 +18,10 @@ install -D -m 0644 data/polkit/com.jegly.OSS.policy \
         "$STAGE/usr/share/polkit-1/actions/com.jegly.OSS.policy"
 install -D -m 0644 data/desktop/oss.desktop \
         "$STAGE/usr/share/applications/oss.desktop"
+# The typefaces are part of the app, not a separate thing to go and install.
+install -d "$STAGE/usr/share/fonts/oss"
+install -m 0644 data/fonts/*.ttf "$STAGE/usr/share/fonts/oss/"
+
 if [ -d data/icons ]; then
     install -d "$STAGE/usr/share/icons"
     cp -r data/icons/hicolor "$STAGE/usr/share/icons/"
@@ -35,7 +39,7 @@ Section: admin
 Priority: optional
 Architecture: all
 Maintainer: OSS <noreply@localhost>
-Depends: python3 (>= 3.11), python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1, policykit-1 | polkitd
+Depends: python3 (>= 3.11), python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1, policykit-1 | polkitd, fontconfig
 Recommends: ufw
 Suggests: auditd, usbguard, debsums, apparmor-utils, openssh-server
 Description: Pick hardening flags, review the diff, apply once
@@ -62,10 +66,23 @@ if [ "$1" = configure ]; then
     if command -v gtk-update-icon-cache >/dev/null 2>&1; then
         gtk-update-icon-cache -qtf /usr/share/icons/hicolor 2>/dev/null || true
     fi
+    if command -v fc-cache >/dev/null 2>&1; then
+        fc-cache -f /usr/share/fonts/oss >/dev/null 2>&1 || true
+    fi
 fi
 exit 0
 POSTINST
 chmod 0755 "$STAGE/DEBIAN/postinst"
+
+cat > "$STAGE/DEBIAN/postrm" <<'POSTRM'
+#!/bin/sh
+set -e
+if command -v fc-cache >/dev/null 2>&1; then
+    fc-cache -f >/dev/null 2>&1 || true
+fi
+exit 0
+POSTRM
+chmod 0755 "$STAGE/DEBIAN/postrm"
 
 dpkg-deb --root-owner-group --build "$STAGE" "build/oss_${VERSION}_all.deb" >/dev/null
 echo "build/oss_${VERSION}_all.deb"

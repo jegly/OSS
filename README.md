@@ -93,16 +93,6 @@ Build it yourself:
 ./tools/packaging-gate.sh
 ```
 
-The bundled typefaces are a separate package, because 17MB of TTFs would be most
-of the main package's size for something optional:
-
-```
-sudo dpkg -i oss-fonts_0.1.0_all.deb
-```
-
-Without it the app uses the system font and the picker simply does not list the
-faces that are missing.
-
 Optional tools unlock extra sections and are never hard dependencies:
 `auditd`, `usbguard`, `debsums`, `apparmor-utils`, `openssh-server`. Each section
 detects absence and says which package it needs.
@@ -123,6 +113,10 @@ not. Settings in effect that the app does not manage are recorded as custom
 entries rather than silently dropped.
 
 ## Appearance
+
+12 typefaces ship with the app — Nunito, Space Grotesk, Quicksand, IBM Plex Mono
+and Serif, Playfair Display, Cormorant Garamond, Instrument Serif, Viaoda Libre,
+Turret Road, DotGothic16 and Press Start 2P. No second package to install.
 
 114 theme combinations ported from a Compose theme set: Catppuccin (4 flavours ×
 14 accents), Dracula (light and dark × 7 accents), and 44 Ptyxis terminal

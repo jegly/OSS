@@ -13,7 +13,8 @@ Depends: ${misc:Depends},
          python3-gi,
          gir1.2-gtk-4.0,
          gir1.2-adw-1,
-         policykit-1 | polkitd
+         policykit-1 | polkitd,
+         fontconfig
 Recommends: ufw
 Suggests: auditd, usbguard, debsums, apparmor-utils, openssh-server
 Description: Pick hardening flags, review the diff, apply once
