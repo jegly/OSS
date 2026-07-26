@@ -45,6 +45,8 @@ ALLOWED_COMMANDS = frozenset(
         "/usr/sbin/augenrules",
         "/usr/bin/mount",
         "/usr/bin/update-desktop-database",
+        "/usr/sbin/apparmor_parser",
+        "/usr/sbin/aa-status",
     }
 )
 

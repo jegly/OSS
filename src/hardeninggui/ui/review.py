@@ -19,6 +19,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 from .. import privileged, probe, render  # noqa: E402
+from .. import apparmor as apparmor_module  # noqa: E402
 from .. import ufw as ufw_module, units as units_module  # noqa: E402
 from .style import mark_solid  # noqa: E402
 
@@ -299,6 +300,15 @@ class ReviewDialog(Adw.Window):
             root.add(self._row("none", ""))
         page.add(root)
 
+        if self.window.apparmor_changes:
+            group = Adw.PreferencesGroup(
+                title="AppArmor",
+                description="Mode is a symlink plus an apparmor_parser reload.",
+            )
+            for change in apparmor_module.plan_changes(self.window.apparmor_changes):
+                group.add(self._row(" ".join(change.command), change.why))
+            page.add(group)
+
         if self.window.unit_changes:
             group = Adw.PreferencesGroup(
                 title="Units",
@@ -383,16 +393,26 @@ class ApplyProgressDialog(Adw.Window):
             else None
         )
         unit_changes = dict(self.window.unit_changes)
+        apparmor_changes = dict(self.window.apparmor_changes)
         thread = threading.Thread(
-            target=self._worker, args=(selection, firewall, unit_changes), daemon=True
+            target=self._worker,
+            args=(selection, firewall, unit_changes, apparmor_changes),
+            daemon=True,
         )
         thread.start()
 
     def _worker(
-        self, selection: dict[str, str], firewall: dict | None, unit_changes: dict
+        self,
+        selection: dict[str, str],
+        firewall: dict | None,
+        unit_changes: dict,
+        apparmor_changes: dict,
     ) -> None:
         outcome = privileged.apply(
-            selection, firewall=firewall, unit_changes=unit_changes
+            selection,
+            firewall=firewall,
+            unit_changes=unit_changes,
+            apparmor_changes=apparmor_changes,
         )
         user_results = []
         if outcome.ok:

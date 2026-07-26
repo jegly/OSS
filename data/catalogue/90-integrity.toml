@@ -6,7 +6,6 @@ title       = "integrity"
 nav         = "Monitoring"
 order       = 90
 syntax      = "special"
-implemented = false
 plan_ref    = "§4.24"
 requires_pkg = "aide"
 desc        = "Tier 1 is debsums -ac / dpkg -V, instant and needs no baseline. Tier 2 is an AIDE baseline with the init/check/accept lifecycle, severity ranking by where the change landed, and cross-referencing every changed packaged file against dpkg.log so apt upgrades stop being reported as findings. After each Apply the app offers to fold its own known changes into the baseline, so hardening the machine does not flood the next integrity check."

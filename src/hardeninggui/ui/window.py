@@ -17,7 +17,9 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 from .. import presets as presets_module  # noqa: E402
+from .. import apparmor as apparmor_module  # noqa: E402
 from .. import probe, settings as settings_module, ufw as ufw_module  # noqa: E402
+
 from ..catalogue import Catalogue, Section  # noqa: E402
 from ..probe import State  # noqa: E402
 from ..staging import Staging  # noqa: E402
@@ -68,6 +70,11 @@ class MainWindow(Adw.ApplicationWindow):
         self.firewall_dirty = False
         #: unit name -> mask|disable|enable|unmask, for units outside the catalogue.
         self.unit_changes: dict[str, str] = {}
+        #: AppArmor profile -> enforce|complain|disable.
+        self.apparmor = apparmor_module.read_unprivileged()
+        self.apparmor_changes: dict[str, str] = {}
+        #: Last integrity result, so the page survives a rebuild.
+        self.integrity_result: dict = {}
 
         self.states = probe.all_states(catalogue, facts, staging.selection)
         self.unaffected = probe.unaffected_mitigations(catalogue, facts)
@@ -378,6 +385,18 @@ class MainWindow(Adw.ApplicationWindow):
                 self.grid_box.append(FirewallPage(self))
                 self._refresh_chrome()
                 return
+            if section_id == "apparmor":
+                from .apparmor_page import ApparmorPage
+
+                self.grid_box.append(ApparmorPage(self))
+                self._refresh_chrome()
+                return
+            if section_id == "integrity":
+                from .integrity_page import IntegrityPage
+
+                self.grid_box.append(IntegrityPage(self))
+                self._refresh_chrome()
+                return
             if section_id == "services":
                 from .services import ServicesPage
 
@@ -601,6 +620,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.staging.changed_count
             + len(self.firewall_changes())
             + len(self.unit_changes)
+            + len(self.apparmor_changes)
         )
         if count:
             self.counter.set_label(f"{count} changed")
@@ -682,6 +702,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.firewall = self.firewall_baseline.copy()
         self.firewall_dirty = False
         self.unit_changes.clear()
+        self.apparmor_changes.clear()
+        self.apparmor = apparmor_module.read_unprivileged()
+        self.apparmor_changes.clear()
         self.staging.reset_to_baseline()
         self._show_section(self.current_section)
 

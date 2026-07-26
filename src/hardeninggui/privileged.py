@@ -39,6 +39,10 @@ class ApplyOutcome:
     rolled_back: bool = False
     #: Firewall state, populated by read_firewall().
     firewall: dict = field(default_factory=dict)
+    #: AppArmor state, populated by read_apparmor().
+    apparmor: dict = field(default_factory=dict)
+    #: Integrity results, populated by the integrity_* calls.
+    integrity: dict = field(default_factory=dict)
     raw: str = ""
 
     @property
@@ -60,6 +64,7 @@ def build_payload(
     sections: list[str] | None = None,
     firewall: dict | None = None,
     unit_changes: dict[str, str] | None = None,
+    apparmor_changes: dict[str, str] | None = None,
 ) -> dict:
     payload: dict = {"version": 1, "selection": dict(selection)}
     if sections is not None:
@@ -68,6 +73,8 @@ def build_payload(
         payload["ufw"] = firewall
     if unit_changes:
         payload["units"] = dict(unit_changes)
+    if apparmor_changes:
+        payload["apparmor"] = dict(apparmor_changes)
     return payload
 
 
@@ -81,14 +88,46 @@ def read_firewall() -> ApplyOutcome:
     return _invoke({"version": 1, "action": "read-firewall"})
 
 
+def read_apparmor() -> ApplyOutcome:
+    """One privileged read of live AppArmor modes and unconfined processes.
+
+    /sys/kernel/security/apparmor is root-only, so the configured mode (from
+    symlinks anyone can see) is on screen first and this fills in what is
+    actually running.
+    """
+    return _invoke({"version": 1, "action": "read-apparmor"})
+
+
+def integrity_verify() -> ApplyOutcome:
+    """Tier 1 package verification, run as root so nothing is skipped.
+
+    `dpkg -V` works unprivileged but cannot stat root-only paths, so a plain-user
+    run silently misses part of the filesystem.
+    """
+    return _invoke({"version": 1, "action": "integrity-verify"})
+
+
+def integrity_baseline() -> ApplyOutcome:
+    """Hash the watched paths and store the baseline."""
+    return _invoke({"version": 1, "action": "integrity-baseline"})
+
+
+def integrity_check() -> ApplyOutcome:
+    """Rescan and report what changed since the baseline."""
+    return _invoke({"version": 1, "action": "integrity-check"})
+
+
 def apply(
     selection: dict[str, str],
     sections: list[str] | None = None,
     firewall: dict | None = None,
     unit_changes: dict[str, str] | None = None,
+    apparmor_changes: dict[str, str] | None = None,
 ) -> ApplyOutcome:
     """Hand the selection to the helper through pkexec and parse the result."""
-    return _invoke(build_payload(selection, sections, firewall, unit_changes))
+    return _invoke(
+        build_payload(selection, sections, firewall, unit_changes, apparmor_changes)
+    )
 
 
 def _invoke(payload: dict) -> ApplyOutcome:
@@ -151,6 +190,8 @@ def _parse(stdout: str, stderr: str, returncode: int) -> ApplyOutcome:
         needs_reboot=list(data.get("needs_reboot", [])),
         rolled_back=bool(data.get("rolled_back", False)),
         firewall=dict(data.get("ufw", {})),
+        apparmor=dict(data.get("apparmor", {})),
+        integrity=dict(data.get("integrity", {})),
         raw=stdout,
     )
 

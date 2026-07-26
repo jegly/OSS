@@ -25,12 +25,16 @@ import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from . import apparmor as apparmor_module
 from . import probe, render, ufw as ufw_module, units as units_module
 from .catalogue import Catalogue
 from .render import ALLOWED_COMMANDS, Plan
 
 #: How long any single command in the transaction gets. update-initramfs is slow.
 COMMAND_TIMEOUT = 300
+
+#: A full-system hash walk is minutes of CPU, not seconds (§4.24.8).
+SCAN_TIMEOUT = 1800
 
 BACKUP_SUFFIX = ".bak"
 
@@ -58,6 +62,10 @@ class Result:
     needs_reboot: list[str] = field(default_factory=list)
     #: Firewall state, for the read-only query the ufw page makes at open time.
     ufw: dict = field(default_factory=dict)
+    #: AppArmor live modes and unconfined processes, for the same reason.
+    apparmor: dict = field(default_factory=dict)
+    #: Integrity results: package verification, or a baseline capture/check.
+    integrity: dict = field(default_factory=dict)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
@@ -297,6 +305,7 @@ def apply_plan(
     selection: dict[str, str],
     firewall: "ufw_module.State | None" = None,
     unit_changes: dict[str, str] | None = None,
+    apparmor_changes: dict[str, str] | None = None,
 ) -> Result:
     """Run the whole transaction, rolling back on any failure."""
     result = Result()
@@ -338,7 +347,11 @@ def apply_plan(
             if not ok:
                 raise ApplyError(f"{command} failed with exit {code}: {output}")
 
-        # 4. Arbitrary unit changes, which the flag catalogue cannot express.
+        # 4. AppArmor profile modes, which are symlinks plus a parser reload.
+        if apparmor_changes:
+            apply_apparmor(apparmor_changes, result)
+
+        # 5. Arbitrary unit changes, which the flag catalogue cannot express.
         for argv, why in units_module.plan_commands(unit_changes or {}):
             code, output = run(argv)
             ok = code == 0
@@ -346,7 +359,7 @@ def apply_plan(
             if not ok:
                 raise ApplyError(f"{why} failed: {output}")
 
-        # 5. The firewall, last: its rules are the thing most likely to cut the
+        # 6. The firewall, last: its rules are the thing most likely to cut the
         #    connection this session is running over.
         if firewall is not None:
             apply_firewall(firewall, result)
@@ -441,6 +454,132 @@ def read_firewall() -> Result:
     return result
 
 
+def read_apparmor() -> Result:
+    """Read-only: live profile modes and unconfined processes."""
+    result = Result()
+    output = apparmor_module.read_status_output()
+    if output is None:
+        result.ok = False
+        result.error = "aa-status could not be run"
+        return result
+    try:
+        modes, unconfined = apparmor_module.parse_status(output)
+    except apparmor_module.ApparmorError as exc:
+        result.ok = False
+        result.error = str(exc)
+        return result
+    result.apparmor = {"modes": modes, "unconfined": unconfined}
+    result.steps.append(Step("readback", f"read {len(modes)} apparmor profile(s)"))
+    return result
+
+
+def integrity_baseline() -> Result:
+    """Hash the watched paths and store the baseline (§4.24.1 'init')."""
+    from . import integrity as integrity_module
+
+    result = Result()
+    entries = integrity_module.scan()
+    digest = integrity_module.save_baseline(entries)
+    result.integrity = {
+        "action": "baseline",
+        "count": len(entries),
+        "sha256": digest,
+        "path": str(integrity_module.BASELINE_PATH),
+    }
+    result.steps.append(
+        Step("write", f"baseline of {len(entries)} file(s) -> {integrity_module.BASELINE_PATH}")
+    )
+    return result
+
+
+def integrity_check() -> Result:
+    """Rescan and diff against the stored baseline (§4.24.1 'check')."""
+    from . import integrity as integrity_module
+
+    result = Result()
+    baseline, created = integrity_module.load_baseline()
+    if not baseline:
+        result.ok = False
+        result.error = "There is no baseline yet — capture one first."
+        return result
+
+    current = integrity_module.scan()
+    findings = integrity_module.diff_baseline(baseline, current)
+    result.integrity = {
+        "action": "check",
+        "created": created,
+        "baseline_count": len(baseline),
+        "scanned": len(current),
+        "findings": [
+            {
+                "path": f.path,
+                "attrs": f.attrs,
+                "severity": f.severity,
+                "reason": f.reason,
+            }
+            for f in findings[:2000]
+        ],
+    }
+    result.steps.append(Step("readback", f"{len(findings)} change(s) since the baseline"))
+    return result
+
+
+def integrity_verify() -> Result:
+    """Tier 1 package verification, run as root so nothing is unreadable."""
+    from . import integrity as integrity_module
+
+    result = Result()
+    report = integrity_module.explain(integrity_module.verify())
+    result.integrity = {
+        "action": "verify",
+        "tool": report.tool,
+        "unreadable": report.unreadable,
+        "error": report.error,
+        "findings": [
+            {
+                "path": f.path,
+                "attrs": f.attrs,
+                "severity": f.severity,
+                "reason": f.reason,
+                "package": f.package,
+                "explained_by": f.explained_by,
+            }
+            for f in report.findings
+        ],
+    }
+    result.ok = report.ran
+    result.error = report.error
+    result.steps.append(Step("readback", f"{report.tool}: {len(report.findings)} finding(s)"))
+    return result
+
+
+def apply_apparmor(changes: dict[str, str], result: Result) -> None:
+    """Set profile modes by managing the symlinks, then reloading each profile."""
+    for change in apparmor_module.plan_changes(changes):
+        for link in change.remove:
+            path = target_path(link)
+            # Only ever a symlink we own, never a real file.
+            if path.is_symlink():
+                path.unlink()
+                result.steps.append(Step("remove", link))
+
+        for link, destination in change.create:
+            path = target_path(link)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if path.is_symlink():
+                path.unlink()
+            elif path.exists():
+                raise ApplyError(f"{link} exists and is not a symlink; refusing to replace it")
+            path.symlink_to(destination)
+            result.steps.append(Step("write", f"{link} -> {destination}"))
+
+        code, output = run(change.command)
+        ok = code == 0
+        result.steps.append(Step("command", " ".join(change.command), ok, output))
+        if not ok:
+            raise ApplyError(f"{change.why} failed: {output}")
+
+
 def apply_firewall(wanted: ufw_module.State, result: Result) -> None:
     """Run the firewall commands, appending each to the report."""
     current = ufw_module.read_unprivileged()
@@ -462,6 +601,14 @@ def run_payload(catalogue: Catalogue, payload: dict) -> Result:
     action = payload.get("action", "apply")
     if action == "read-firewall":
         return read_firewall()
+    if action == "read-apparmor":
+        return read_apparmor()
+    if action == "integrity-verify":
+        return integrity_verify()
+    if action == "integrity-baseline":
+        return integrity_baseline()
+    if action == "integrity-check":
+        return integrity_check()
     if action != "apply":
         return Result(ok=False, error=f"unknown action {action!r}")
 
@@ -484,6 +631,13 @@ def run_payload(catalogue: Catalogue, payload: dict) -> Result:
         except units_module.UnitError as exc:
             return Result(ok=False, error=f"bad units payload: {exc}")
 
+    apparmor_changes: dict[str, str] = {}
+    if "apparmor" in payload:
+        try:
+            apparmor_changes = apparmor_module.from_payload(payload["apparmor"])
+        except apparmor_module.ApparmorError as exc:
+            return Result(ok=False, error=f"bad apparmor payload: {exc}")
+
     sections = payload.get("sections")
     current = probe.read_target_files(catalogue)
     try:
@@ -491,7 +645,14 @@ def run_payload(catalogue: Catalogue, payload: dict) -> Result:
     except render.RenderError as exc:
         return Result(ok=False, error=f"could not build the plan: {exc}")
 
-    if plan.is_empty and wanted_firewall is None and not unit_changes:
+    if (
+        plan.is_empty
+        and wanted_firewall is None
+        and not unit_changes
+        and not apparmor_changes
+    ):
         return Result(ok=True, error="", steps=[Step("write", "nothing to do", True)])
 
-    return apply_plan(catalogue, plan, selection, wanted_firewall, unit_changes)
+    return apply_plan(
+        catalogue, plan, selection, wanted_firewall, unit_changes, apparmor_changes
+    )
