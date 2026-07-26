@@ -41,8 +41,14 @@ GLASS_POPOVER_OFFSET = -0.10  # popovers are *more* opaque, so text stays readab
 MIN_CONTRAST = 4.5
 MIN_CONTRAST_DIM = 3.0
 
-#: Font families bundled with the app (see debian/install). Any of them pairs
-#: with any theme — the Compose original treats font and theme as independent.
+#: Font families bundled with the app. Any of them pairs with any theme — the
+#: Compose original treats font and theme as independent.
+#:
+#: The oss-fonts package ships 13 families; 12 are listed here. Noto Sans
+#: Egyptian Hieroglyphs is deliberately left out: it has no Latin coverage, so
+#: selecting it would render every label in the app — including the picker needed
+#: to change it back — as empty boxes, with no way out from inside the UI. The
+#: font is still installed and usable by anything else on the system.
 BUNDLED_FONTS = [
     ("system", "System default", ""),
     ("nunito", "Nunito", "Nunito"),

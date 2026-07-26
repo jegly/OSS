@@ -31,9 +31,15 @@ Maintainer: OSS <noreply@localhost>
 Depends: fontconfig
 Enhances: oss
 Description: Optional typefaces for the OSS
- $COUNT TrueType faces the appearance panel can use: Nunito, Space Grotesk,
- Quicksand, IBM Plex Mono and Serif, Playfair Display, Cormorant Garamond,
- Instrument Serif, Viaoda Libre, Turret Road, DotGothic16 and Press Start 2P.
+ $COUNT TrueType faces across 13 families: Nunito, Space Grotesk, Quicksand,
+ IBM Plex Mono and Serif, Playfair Display, Cormorant Garamond, Instrument
+ Serif, Viaoda Libre, Turret Road, DotGothic16, Press Start 2P and Noto Sans
+ Egyptian Hieroglyphs.
+ .
+ Twelve of the thirteen appear in the appearance picker. Noto Sans Egyptian
+ Hieroglyphs is installed for general use but not offered as a UI font, because
+ it has no Latin coverage and choosing it would leave every label in the app
+ blank.
  .
  Entirely optional. Without this package the app uses the system font and the
  picker simply does not offer the missing faces.

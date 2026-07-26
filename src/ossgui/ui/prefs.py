@@ -98,6 +98,15 @@ class AppearanceDialog(Adw.PreferencesWindow):
         self.font_row.connect("notify::selected", self._on_font)
         font_group.add(self.font_row)
 
+        reset = Adw.ActionRow(
+            title="Reset appearance to defaults",
+            subtitle="Also the way out if a font choice leaves the text unreadable",
+        )
+        reset_button = Gtk.Button(label="Reset", valign=Gtk.Align.CENTER)
+        reset_button.connect("clicked", self._on_reset)
+        reset.add_suffix(reset_button)
+        font_group.add(reset)
+
         self.scale_row = Adw.SpinRow.new_with_range(0.75, 1.75, 0.05)
         self.scale_row.set_title("Text size")
         self.scale_row.set_subtitle("Multiplies the system font scale")
@@ -260,6 +269,17 @@ class AppearanceDialog(Adw.PreferencesWindow):
             return
         self.settings.font_scale = self.scale_row.get_value()
         self._apply()
+
+    def _on_reset(self, _button: Gtk.Button) -> None:
+        """Back to the shipped defaults, without needing to read the widgets."""
+        defaults = theme_module.Settings()
+        for field in ("family", "flavor", "accent", "palette", "font",
+                      "monochrome_accents", "glass", "glass_alpha", "font_scale"):
+            setattr(self.settings, field, getattr(defaults, field))
+        settings_module.save(self.settings)
+        self.window.style_manager.apply(self.settings)
+        self.window.toast("Appearance reset to defaults.")
+        self._rebuild_variant_rows()
 
     def _on_glass(self, *_args) -> None:
         if self._updating:
