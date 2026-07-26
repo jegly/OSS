@@ -9,7 +9,7 @@ title   = "pam"
 nav     = "Access"
 order   = 55
 syntax  = "keyval"
-target  = "/etc/security/pwquality.conf.d/99-hardening-gui.conf"
+target  = "/etc/security/pwquality.conf.d/99-oss.conf"
 desc    = "Password strength, lockout policy and login defaults."
 
 # --------------------------------------------------------------------------- #

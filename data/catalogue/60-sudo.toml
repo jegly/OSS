@@ -9,7 +9,7 @@ title   = "sudo"
 nav     = "Access"
 order   = 60
 syntax  = "sudoers"
-target  = "/etc/sudoers.d/99-hardening-gui"
+target  = "/etc/sudoers.d/99-oss"
 desc    = "sudo policy. Validated with visudo -c before it is installed."
 
 [[flag]]

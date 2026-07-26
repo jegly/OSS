@@ -46,19 +46,19 @@ echo
 echo "Package contents:"
 contents=$(dpkg-deb -c "$DEB")
 for path in \
-    ./usr/bin/hardening-gui \
-    ./usr/libexec/hardening-gui-helper \
-    ./usr/share/polkit-1/actions/org.hardening.ControlCenter.policy \
-    ./usr/share/applications/hardening-gui.desktop \
-    ./usr/share/hardening-gui/catalogue/10-sysctl.toml \
-    ./usr/share/hardening-gui/themes/ptyxis.toml \
-    ./usr/lib/hardening-gui/hardeninggui/apply.py
+    ./usr/bin/oss \
+    ./usr/libexec/oss-helper \
+    ./usr/share/polkit-1/actions/io.github.jegly.OSS.policy \
+    ./usr/share/applications/oss.desktop \
+    ./usr/share/oss/catalogue/10-sysctl.toml \
+    ./usr/share/oss/themes/ptyxis.toml \
+    ./usr/lib/oss/ossgui/apply.py
 do
     echo "$contents" | grep -q " $path\$"
     check $? "$path"
 done
 
-echo "$contents" | grep -q '^-rwxr-xr-x.* ./usr/libexec/hardening-gui-helper$'
+echo "$contents" | grep -q '^-rwxr-xr-x.* ./usr/libexec/oss-helper$'
 check $? "helper is executable"
 
 # A grep that correctly finds nothing exits 1, so these are inverted
@@ -72,13 +72,13 @@ echo
 
 echo "Offline behaviour:"
 if grep -rqE 'urllib|requests|socket\.create_connection|http://|https://' \
-        src/hardeninggui/ --include='*.py'; then
+        src/ossgui/ --include='*.py'; then
     check 1 "no network client code in the package"
 else
     check 0 "no network client code in the package"
 fi
 
-if grep -qE 'apt-get|apt install|wget|curl' build/hardening-gui/DEBIAN/postinst; then
+if grep -qE 'apt-get|apt install|wget|curl' build/oss/DEBIAN/postinst; then
     check 1 "postinst makes no network calls"
 else
     check 0 "postinst makes no network calls"
@@ -86,12 +86,12 @@ fi
 echo
 
 echo "The installed tree works:"
-STAGE=build/hardening-gui
-if HARDENING_GUI_DATA="$STAGE/usr/share/hardening-gui" \
-   PYTHONPATH="$STAGE/usr/lib/hardening-gui" \
+STAGE=build/oss
+if OSS_DATA="$STAGE/usr/share/oss" \
+   PYTHONPATH="$STAGE/usr/lib/oss" \
    python3 - <<'PY'
 import sys
-from hardeninggui import catalogue, presets, probe, render
+from ossgui import catalogue, presets, probe, render
 
 cat = catalogue.load()
 assert len(cat.flags) > 400, f"only {len(cat.flags)} flags"

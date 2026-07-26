@@ -9,7 +9,7 @@ title   = "updates"
 nav     = "Desktop"
 order   = 97
 syntax  = "apt"
-target  = "/etc/apt/apt.conf.d/99-hardening-gui"
+target  = "/etc/apt/apt.conf.d/99-oss"
 desc    = "Unattended security upgrades and how often apt checks."
 
 [[flag]]

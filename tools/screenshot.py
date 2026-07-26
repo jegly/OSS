@@ -25,11 +25,11 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
-from hardeninggui import catalogue as catalogue_module  # noqa: E402
-from hardeninggui import probe, theme  # noqa: E402
-from hardeninggui.staging import Staging  # noqa: E402
-from hardeninggui.ui.style import StyleManager  # noqa: E402
-from hardeninggui.ui.window import MainWindow  # noqa: E402
+from ossgui import catalogue as catalogue_module  # noqa: E402
+from ossgui import probe, theme  # noqa: E402
+from ossgui.staging import Staging  # noqa: E402
+from ossgui.ui.style import StyleManager  # noqa: E402
+from ossgui.ui.window import MainWindow  # noqa: E402
 
 
 def capture(widget: Gtk.Widget, path: Path) -> bool:
@@ -85,7 +85,7 @@ def main() -> int:
         font=args.font,
     )
 
-    application = Adw.Application(application_id="org.hardening.Screenshot")
+    application = Adw.Application(application_id="io.github.jegly.OSS.Screenshot")
     status = {"ok": False}
 
     def on_activate(app: Adw.Application) -> None:
@@ -99,7 +99,7 @@ def main() -> int:
         window = MainWindow(app, loaded, facts, staging, style, settings)
 
         if args.preset:
-            from hardeninggui import presets
+            from ossgui import presets
 
             preset = presets.get(args.preset)
             if preset is not None:
@@ -116,7 +116,7 @@ def main() -> int:
         def shoot() -> bool:
             nonlocal target
             if args.dialog == "review":
-                from hardeninggui.ui.review import ReviewDialog
+                from ossgui.ui.review import ReviewDialog
 
                 dialog = ReviewDialog(window, apply_callback=lambda: None)
                 dialog.present()
@@ -124,7 +124,7 @@ def main() -> int:
                 GLib.timeout_add(args.delay, finish)
                 return False
             if args.dialog == "appearance":
-                from hardeninggui.ui.prefs import AppearanceDialog
+                from ossgui.ui.prefs import AppearanceDialog
 
                 dialog = AppearanceDialog(window)
                 dialog.present()

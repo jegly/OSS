@@ -1,4 +1,4 @@
-# Hardening Control Center — Build Plan
+# OSS — Build Plan
 
 GTK4 app for Ubuntu 26.04. Pick hardening flags from categorised grids, mass-select whole
 groups, hit **Apply**, enter password once, done. Simple by default (pick a preset, apply),
@@ -7,7 +7,7 @@ advanced when needed (every flag individually toggleable).
 Replaces hand-editing `/etc/default/grub`, `/etc/modprobe.d/*`, `/etc/sysctl.d/*`,
 `sshd_config`, `fstab` and running `ufw` commands by hand on every new machine.
 
-**Core promise:** `dpkg -i hardening-gui.deb` on a *fresh, offline* Ubuntu install → open app →
+**Core promise:** `dpkg -i oss.deb` on a *fresh, offline* Ubuntu install → open app →
 pick the **stock** preset → Apply → reboot → *then* connect to the network for the first time.
 The machine is hardened before it ever sees a packet.
 
@@ -42,7 +42,7 @@ CLI to install cleanly on Ubuntu Server too (dpkg ignores Recommends; GUI simply
 **Optional tooling is degrade-gracefully, never a hard dep**: `auditd`, `aide`, `usbguard`,
 `debsums`, `apparmor-profiles` sections detect absence and show an "install package X to use
 this" state with the exact offline command. Optionally ship a companion
-`hardening-gui-extras.deb` bundle (or a directory of cached `.deb`s) for air-gapped installs of
+`oss-extras.deb` bundle (or a directory of cached `.deb`s) for air-gapped installs of
 those tools.
 
 `postinst` does nothing but `update-desktop-database`-style local calls. No downloads, ever.
@@ -50,7 +50,7 @@ those tools.
 ### 1.2 First-boot / offline workflow (the primary use case)
 
 1. Fresh install finishes, machine **stays offline**.
-2. `dpkg -i hardening-gui.deb` from USB.
+2. `dpkg -i oss.deb` from USB.
 3. Launch → first-run screen offers: **apply a preset** (stock / recommended / paranoid) or
    **capture this system** (§5.2) or *start from scratch*.
 4. Review diff → Apply → reboot.
@@ -60,22 +60,22 @@ those tools.
 
 | Section | Target |
 |---|---|
-| sysctl | `/etc/sysctl.d/99-hardening-gui.conf` |
-| modprobe | `/etc/modprobe.d/99-hardening-gui.conf` |
-| GRUB | `/etc/default/grub.d/99-hardening-gui.cfg` |
-| SSH | `/etc/ssh/sshd_config.d/99-hardening-gui.conf` |
-| sudo | `/etc/sudoers.d/99-hardening-gui` (validate with `visudo -c` before install) |
+| sysctl | `/etc/sysctl.d/99-oss.conf` |
+| modprobe | `/etc/modprobe.d/99-oss.conf` |
+| GRUB | `/etc/default/grub.d/99-oss.cfg` |
+| SSH | `/etc/ssh/sshd_config.d/99-oss.conf` |
+| sudo | `/etc/sudoers.d/99-oss` (validate with `visudo -c` before install) |
 | PAM / login | `/etc/security/pwquality.conf.d/`, `/etc/security/faillock.conf`, `/etc/login.defs` |
-| systemd units | `/etc/systemd/system/<unit>.d/99-hardening-gui.conf` drop-ins |
-| journald | `/etc/systemd/journald.conf.d/99-hardening-gui.conf` |
-| coredumps | `/etc/systemd/coredump.conf.d/99-hardening-gui.conf` |
-| resolved | `/etc/systemd/resolved.conf.d/99-hardening-gui.conf` |
-| NetworkManager | `/etc/NetworkManager/conf.d/99-hardening-gui.conf` |
-| auditd | `/etc/audit/rules.d/99-hardening-gui.rules` |
+| systemd units | `/etc/systemd/system/<unit>.d/99-oss.conf` drop-ins |
+| journald | `/etc/systemd/journald.conf.d/99-oss.conf` |
+| coredumps | `/etc/systemd/coredump.conf.d/99-oss.conf` |
+| resolved | `/etc/systemd/resolved.conf.d/99-oss.conf` |
+| NetworkManager | `/etc/NetworkManager/conf.d/99-oss.conf` |
+| auditd | `/etc/audit/rules.d/99-oss.rules` |
 | fstab | `/etc/fstab` (in-place, backed up — no drop-in mechanism exists) |
 | UFW | `ufw` CLI |
 | Services | `systemctl mask` / `disable` |
-| Permissions | direct `chmod`/`chown`/`chattr` + rollback journal at `/var/lib/hardening-gui/perms.json` |
+| Permissions | direct `chmod`/`chown`/`chattr` + rollback journal at `/var/lib/oss/perms.json` |
 
 One file per section, `99-` prefix for precedence. Each backed up to `<file>.bak` before
 writing. Delete the file to undo.
@@ -484,7 +484,7 @@ Each finding gets a one-click fix with the resulting `chmod` shown first.
 
 ### 4.12 systemd service sandboxing — unit drop-ins
 
-Applied per-unit as `/etc/systemd/system/<unit>.d/99-hardening-gui.conf`:
+Applied per-unit as `/etc/systemd/system/<unit>.d/99-oss.conf`:
 
 `NoNewPrivileges=yes`, `PrivateTmp=yes`, `PrivateDevices=yes`, `ProtectSystem=strict`,
 `ProtectHome=yes`, `ProtectKernelTunables=yes`, `ProtectKernelModules=yes`,
@@ -737,8 +737,8 @@ action = "deny"; direction = "in"; port = "3389"; proto = "tcp"
 ```
 
 `base` gives preset inheritance — *paranoid* = *recommended* + overrides, a user preset =
-*stock* + their tweaks. Shipped in `/usr/share/hardening-gui/presets/`, user presets in
-`~/.config/hardening-gui/presets/`.
+*stock* + their tweaks. Shipped in `/usr/share/oss/presets/`, user presets in
+`~/.config/oss/presets/`.
 
 ### 5.1 Shipped presets
 
@@ -960,7 +960,7 @@ live `mount -o remount` are what stop §4.7, §4.9 and §4.10 from locking you o
 
 ## 9. Helper security
 
-`/usr/libexec/hardening-gui-helper`, invoked by `pkexec`, polkit action `auth_admin`.
+`/usr/libexec/oss-helper`, invoked by `pkexec`, polkit action `auth_admin`.
 
 Takes **one argument: a path to a JSON file**. Validates every key against an allowlist compiled
 from the same TOML data the GUI uses. No free-form strings, no shell interpolation. Short enough

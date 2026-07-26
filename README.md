@@ -1,4 +1,6 @@
-# Hardening Control Center
+# OSS
+
+*Operating System Settings.*
 
 A GTK4 control centre for Linux hardening. Pick settings from categorised grids,
 review the literal diff of every file that will change, then apply the whole set
@@ -10,6 +12,11 @@ online — everything it needs ships with a stock desktop.
 ![the sysctl section](docs/screenshot-sysctl.png)
 
 ![the dashboard](docs/screenshot-dashboard.png)
+
+> **On the name.** OSS also means Open Source Software, and — relevant here —
+> Open Sound System, the Linux audio API that ALSA replaced. Files this app
+> writes into `/etc/modprobe.d/` are named `99-oss.conf`, which in that
+> directory can read as audio configuration. It isn't; it's this.
 
 ## Why it exists
 
@@ -43,7 +50,7 @@ the reload, and that section is stock again. The two things with no drop-in
 mechanism — `fstab` and file permissions — keep their own records instead: a
 `.bak` and a rollback journal.
 
-**The helper doesn't trust the GUI.** `/usr/libexec/hardening-gui-helper` takes
+**The helper doesn't trust the GUI.** `/usr/libexec/oss-helper` takes
 one JSON file and re-renders every target from the shipped catalogue itself. All
 it accepts is flag ids and values, each checked against the catalogue's own
 allowlist. Nothing is interpolated into a shell, and every command it can run is
@@ -76,7 +83,7 @@ quietly drifting.
 ## Install
 
 ```
-sudo dpkg -i hardening-gui_0.1.0_all.deb
+sudo dpkg -i oss_0.1.0_all.deb
 ```
 
 Build it yourself:
@@ -90,7 +97,7 @@ The bundled typefaces are a separate package, because 17MB of TTFs would be most
 of the main package's size for something optional:
 
 ```
-sudo dpkg -i hardening-gui-fonts_0.1.0_all.deb
+sudo dpkg -i oss-fonts_0.1.0_all.deb
 ```
 
 Without it the app uses the system font and the picker simply does not list the
@@ -130,14 +137,14 @@ readable rather than being dropped.
 ## Development
 
 ```
-PYTHONPATH=src python3 hardening-gui        # run from the tree
+PYTHONPATH=src python3 oss        # run from the tree
 python3 -m unittest discover -s tests       # 52 tests
 python3 tools/screenshot.py out.png --section ufw
 python3 tools/build_presets.py              # regenerate derived presets
 ```
 
-The modules directly under `src/hardeninggui/` are stdlib-only so the privileged
-helper can share them; everything importing `gi` lives in `src/hardeninggui/ui/`.
+The modules directly under `src/ossgui/` are stdlib-only so the privileged
+helper can share them; everything importing `gi` lives in `src/ossgui/ui/`.
 
 Destructive paths — `fstab`, SUID stripping, USBGuard, faillock,
 `kernel.modules_disabled` — should be tested in a VM snapshot, not on a machine

@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from hardeninggui import ufw  # noqa: E402
+from ossgui import ufw  # noqa: E402
 
 
 class TestRuleValidation(unittest.TestCase):
@@ -195,43 +195,43 @@ class TestUnits(unittest.TestCase):
     """Arbitrary systemd units — the half the flag catalogue cannot express."""
 
     def test_builds_a_mask_command(self) -> None:
-        from hardeninggui import units
+        from ossgui import units
         self.assertEqual(
             units.to_argv("cups.service", "mask"),
             ["/usr/bin/systemctl", "mask", "--now", "cups.service"],
         )
 
     def test_refuses_to_mask_a_unit_the_system_needs(self) -> None:
-        from hardeninggui import units
+        from ossgui import units
         for name in ("dbus.service", "systemd-logind.service", "sysinit.target"):
             with self.assertRaises(units.UnitError, msg=name):
                 units.to_argv(name, "mask")
 
     def test_rejects_shell_metacharacters_in_a_unit_name(self) -> None:
-        from hardeninggui import units
+        from ossgui import units
         for name in ("foo; rm -rf /", "../../etc/passwd", "a b.service", "$(id).service"):
             with self.assertRaises(units.UnitError, msg=name):
                 units.to_argv(name, "disable")
 
     def test_rejects_an_unknown_action(self) -> None:
-        from hardeninggui import units
+        from ossgui import units
         with self.assertRaises(units.UnitError):
             units.to_argv("cups.service", "destroy")
 
     def test_rejects_a_name_without_a_known_suffix(self) -> None:
-        from hardeninggui import units
+        from ossgui import units
         with self.assertRaises(units.UnitError):
             units.to_argv("cups", "disable")
 
     def test_payload_validates_every_entry(self) -> None:
-        from hardeninggui import units
+        from ossgui import units
         good = units.from_payload({"cups.service": "disable"})
         self.assertEqual(good, {"cups.service": "disable"})
         with self.assertRaises(units.UnitError):
             units.from_payload({"dbus.service": "mask"})
 
     def test_loopback_sockets_are_not_public(self) -> None:
-        from hardeninggui import units
+        from ossgui import units
         self.assertFalse(units.Socket("tcp", "127.0.0.1", 631).public)
         self.assertFalse(units.Socket("tcp", "::1", 631).public)
         self.assertTrue(units.Socket("tcp", "0.0.0.0", 631).public)

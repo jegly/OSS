@@ -7,4 +7,4 @@ nav         = "Access"
 order       = 70
 syntax      = "special"
 plan_ref    = "§4.11"
-desc        = "Path table with current vs recommended mode and owner, an octal picker, custom paths, the SUID/SGID audit with per-binary safe-to-strip guidance, and the read-only scans (world-writable, unowned files, writable $PATH entries, .rhosts/.netrc). chmod has no config file behind it, so this section keeps a rollback journal at /var/lib/hardening-gui/perms.json and its undo is a real feature."
+desc        = "Path table with current vs recommended mode and owner, an octal picker, custom paths, the SUID/SGID audit with per-binary safe-to-strip guidance, and the read-only scans (world-writable, unowned files, writable $PATH entries, .rhosts/.netrc). chmod has no config file behind it, so this section keeps a rollback journal at /var/lib/oss/perms.json and its undo is a real feature."

@@ -5,32 +5,32 @@ set -eu
 cd "$(dirname "$0")/.."
 
 VERSION=$(head -1 debian/changelog | sed 's/.*(\(.*\)).*/\1/')
-STAGE=build/hardening-gui
+STAGE=build/oss
 rm -rf build && mkdir -p "$STAGE/DEBIAN"
 
-install -d "$STAGE/usr/lib/hardening-gui"
-cp -r src/hardeninggui "$STAGE/usr/lib/hardening-gui/"
+install -d "$STAGE/usr/lib/oss"
+cp -r src/ossgui "$STAGE/usr/lib/oss/"
 find "$STAGE" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 
-install -D -m 0755 hardening-gui "$STAGE/usr/bin/hardening-gui"
-install -D -m 0755 helper/hardening-gui-helper "$STAGE/usr/libexec/hardening-gui-helper"
-install -D -m 0644 data/polkit/org.hardening.ControlCenter.policy \
-        "$STAGE/usr/share/polkit-1/actions/org.hardening.ControlCenter.policy"
-install -D -m 0644 data/desktop/hardening-gui.desktop \
-        "$STAGE/usr/share/applications/hardening-gui.desktop"
-install -d "$STAGE/usr/share/hardening-gui"
-cp -r data/catalogue data/presets data/themes "$STAGE/usr/share/hardening-gui/"
+install -D -m 0755 oss "$STAGE/usr/bin/oss"
+install -D -m 0755 helper/oss-helper "$STAGE/usr/libexec/oss-helper"
+install -D -m 0644 data/polkit/io.github.jegly.OSS.policy \
+        "$STAGE/usr/share/polkit-1/actions/io.github.jegly.OSS.policy"
+install -D -m 0644 data/desktop/oss.desktop \
+        "$STAGE/usr/share/applications/oss.desktop"
+install -d "$STAGE/usr/share/oss"
+cp -r data/catalogue data/presets data/themes "$STAGE/usr/share/oss/"
 
 # Binary control file. Written out here rather than derived from
 # debian/control, because the substitution variables debhelper would expand
 # are not available when building this way.
 cat > "$STAGE/DEBIAN/control" <<CONTROL
-Package: hardening-gui
+Package: oss
 Version: $VERSION
 Section: admin
 Priority: optional
 Architecture: all
-Maintainer: Hardening Control Center <noreply@localhost>
+Maintainer: OSS <noreply@localhost>
 Depends: python3 (>= 3.11), python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1, policykit-1 | polkitd
 Recommends: ufw
 Suggests: auditd, usbguard, debsums, apparmor-utils, openssh-server
@@ -60,5 +60,5 @@ exit 0
 POSTINST
 chmod 0755 "$STAGE/DEBIAN/postinst"
 
-dpkg-deb --root-owner-group --build "$STAGE" "build/hardening-gui_${VERSION}_all.deb" >/dev/null
-echo "build/hardening-gui_${VERSION}_all.deb"
+dpkg-deb --root-owner-group --build "$STAGE" "build/oss_${VERSION}_all.deb" >/dev/null
+echo "build/oss_${VERSION}_all.deb"

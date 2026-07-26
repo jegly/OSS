@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build hardening-gui-fonts: the bundled faces, in their own package.
+# Build oss-fonts: the bundled faces, in their own package.
 #
 # Separate because 17MB of TTFs would be most of the main package's size for
 # something entirely optional — the app picks up whichever of these are present
@@ -15,22 +15,22 @@ if [ ! -d "$SOURCE" ]; then
 fi
 
 VERSION=$(head -1 debian/changelog | sed 's/.*(\(.*\)).*/\1/')
-STAGE=build/hardening-gui-fonts
-rm -rf "$STAGE" && mkdir -p "$STAGE/DEBIAN" "$STAGE/usr/share/fonts/hardening-gui"
+STAGE=build/oss-fonts
+rm -rf "$STAGE" && mkdir -p "$STAGE/DEBIAN" "$STAGE/usr/share/fonts/oss"
 
-find "$SOURCE" -name '*.ttf' -exec install -m 0644 {} "$STAGE/usr/share/fonts/hardening-gui/" \;
-COUNT=$(find "$STAGE/usr/share/fonts/hardening-gui" -name '*.ttf' | wc -l)
+find "$SOURCE" -name '*.ttf' -exec install -m 0644 {} "$STAGE/usr/share/fonts/oss/" \;
+COUNT=$(find "$STAGE/usr/share/fonts/oss" -name '*.ttf' | wc -l)
 
 cat > "$STAGE/DEBIAN/control" <<CONTROL
-Package: hardening-gui-fonts
+Package: oss-fonts
 Version: $VERSION
 Section: fonts
 Priority: optional
 Architecture: all
-Maintainer: Hardening Control Center <noreply@localhost>
+Maintainer: OSS <noreply@localhost>
 Depends: fontconfig
-Enhances: hardening-gui
-Description: Optional typefaces for the Hardening Control Center
+Enhances: oss
+Description: Optional typefaces for the OSS
  $COUNT TrueType faces the appearance panel can use: Nunito, Space Grotesk,
  Quicksand, IBM Plex Mono and Serif, Playfair Display, Cormorant Garamond,
  Instrument Serif, Viaoda Libre, Turret Road, DotGothic16 and Press Start 2P.
@@ -44,7 +44,7 @@ cat > "$STAGE/DEBIAN/postinst" <<'POSTINST'
 # Local call only — rebuilds the font cache, downloads nothing.
 set -e
 if [ "$1" = configure ] && command -v fc-cache >/dev/null 2>&1; then
-    fc-cache -f /usr/share/fonts/hardening-gui >/dev/null 2>&1 || true
+    fc-cache -f /usr/share/fonts/oss >/dev/null 2>&1 || true
 fi
 exit 0
 POSTINST
@@ -60,5 +60,5 @@ exit 0
 POSTRM
 chmod 0755 "$STAGE/DEBIAN/postrm"
 
-dpkg-deb --root-owner-group --build "$STAGE" "build/hardening-gui-fonts_${VERSION}_all.deb" >/dev/null
-echo "build/hardening-gui-fonts_${VERSION}_all.deb  ($COUNT faces)"
+dpkg-deb --root-owner-group --build "$STAGE" "build/oss-fonts_${VERSION}_all.deb" >/dev/null
+echo "build/oss-fonts_${VERSION}_all.deb  ($COUNT faces)"

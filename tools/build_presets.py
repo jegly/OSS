@@ -23,8 +23,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from hardeninggui import catalogue as catalogue_module  # noqa: E402
-from hardeninggui import probe, tomlemit  # noqa: E402
+from ossgui import catalogue as catalogue_module  # noqa: E402
+from ossgui import probe, tomlemit  # noqa: E402
 
 OUT = ROOT / "data" / "presets"
 

@@ -10,7 +10,7 @@ title   = "modprobe.d"
 nav     = "System"
 order   = 30
 syntax  = "modprobe"
-target  = "/etc/modprobe.d/99-hardening-gui.conf"
+target  = "/etc/modprobe.d/99-oss.conf"
 reload  = [["/usr/sbin/depmod", "-a"], ["/usr/sbin/update-initramfs", "-u"]]
 desc    = "Stop kernel modules loading at all. Already-loaded modules need a reboot."
 

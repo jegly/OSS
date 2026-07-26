@@ -1,6 +1,6 @@
 __pycache__/
 *.pyc
 build/
-debian/hardening-gui/
+debian/oss/
 *.deb
 build/

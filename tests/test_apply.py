@@ -1,6 +1,6 @@
 """Transaction tests — writes, backups and rollback, against a sandbox root.
 
-Run with:  HARDENING_GUI_ROOT=<tmpdir> python3 -m unittest discover tests
+Run with:  OSS_ROOT=<tmpdir> python3 -m unittest discover tests
 The sandbox root is honoured only when not running as root (see apply.target_path),
 so these tests can never touch the real system files.
 """
@@ -15,15 +15,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from hardeninggui import apply, catalogue, probe, render  # noqa: E402
+from ossgui import apply, catalogue, probe, render  # noqa: E402
 
 
 class SandboxCase(unittest.TestCase):
     def setUp(self) -> None:
         self.sandbox = tempfile.TemporaryDirectory()
-        os.environ["HARDENING_GUI_ROOT"] = self.sandbox.name
+        os.environ["OSS_ROOT"] = self.sandbox.name
         self.addCleanup(self.sandbox.cleanup)
-        self.addCleanup(os.environ.pop, "HARDENING_GUI_ROOT", None)
+        self.addCleanup(os.environ.pop, "OSS_ROOT", None)
         self.catalogue = catalogue.load()
 
     def sandboxed(self, path: str) -> Path:
@@ -32,13 +32,13 @@ class SandboxCase(unittest.TestCase):
 
 class TestWriteAndBackup(SandboxCase):
     def test_write_creates_file_with_mode(self) -> None:
-        target = self.sandboxed("/etc/sysctl.d/99-hardening-gui.conf")
+        target = self.sandboxed("/etc/sysctl.d/99-oss.conf")
         apply.write_atomic(target, "kernel.kptr_restrict = 2\n", 0o644)
         self.assertEqual(target.read_text(), "kernel.kptr_restrict = 2\n")
         self.assertEqual(target.stat().st_mode & 0o777, 0o644)
 
     def test_sudoers_write_is_0440(self) -> None:
-        target = self.sandboxed("/etc/sudoers.d/99-hardening-gui")
+        target = self.sandboxed("/etc/sudoers.d/99-oss")
         apply.write_atomic(target, "Defaults use_pty\n", 0o440)
         self.assertEqual(target.stat().st_mode & 0o777, 0o440)
 
@@ -55,13 +55,13 @@ class TestWriteAndBackup(SandboxCase):
         self.assertEqual(target.read_text(), "UMASK\t022\n")
 
     def test_restore_removes_a_file_that_did_not_exist_before(self) -> None:
-        target = self.sandboxed("/etc/sysctl.d/99-hardening-gui.conf")
+        target = self.sandboxed("/etc/sysctl.d/99-oss.conf")
         apply.write_atomic(target, "x = 1\n", 0o644)
         apply.restore(target)
         self.assertFalse(target.exists())
 
     def test_refuses_to_write_through_a_symlink(self) -> None:
-        target = self.sandboxed("/etc/sysctl.d/99-hardening-gui.conf")
+        target = self.sandboxed("/etc/sysctl.d/99-oss.conf")
         target.parent.mkdir(parents=True, exist_ok=True)
         elsewhere = self.sandboxed("/etc/passwd")
         elsewhere.parent.mkdir(parents=True, exist_ok=True)
@@ -117,14 +117,14 @@ class TestPayloadValidation(SandboxCase):
 
 class TestRollback(SandboxCase):
     def test_a_failing_command_restores_every_file(self) -> None:
-        target = self.sandboxed("/etc/sysctl.d/99-hardening-gui.conf")
+        target = self.sandboxed("/etc/sysctl.d/99-oss.conf")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("# original\n")
 
         plan = render.Plan(
             writes=[
                 render.FileWrite(
-                    path="/etc/sysctl.d/99-hardening-gui.conf",
+                    path="/etc/sysctl.d/99-oss.conf",
                     content="kernel.kptr_restrict = 2\n",
                     section="sysctl",
                 )
@@ -151,14 +151,14 @@ class TestRenderIdempotence(SandboxCase):
         selection = {"kptr_restrict": "2", "dmesg_restrict": "1"}
         first = render.render(self.catalogue, selection, current={})
         writes = {w.path: w.content for w in first.writes}
-        self.assertIn("/etc/sysctl.d/99-hardening-gui.conf", writes)
+        self.assertIn("/etc/sysctl.d/99-oss.conf", writes)
 
         second = render.render(self.catalogue, selection, current=writes)
         self.assertEqual(second.writes, [])
         self.assertEqual(second.commands, [], "an unchanged section must not reload")
 
     def test_deselecting_everything_removes_the_dropin(self) -> None:
-        target = "/etc/sysctl.d/99-hardening-gui.conf"
+        target = "/etc/sysctl.d/99-oss.conf"
         plan = render.render(self.catalogue, {}, current={target: "kernel.x = 1\n"})
         self.assertIn(target, [r.path for r in plan.removes])
 

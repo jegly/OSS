@@ -1,12 +1,12 @@
-Source: hardening-gui
+Source: oss
 Section: admin
 Priority: optional
-Maintainer: Hardening Control Center <noreply@localhost>
+Maintainer: OSS <noreply@localhost>
 Build-Depends: debhelper-compat (= 13), python3
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
 
-Package: hardening-gui
+Package: oss
 Architecture: all
 Depends: ${misc:Depends},
          python3 (>= 3.11),

@@ -1,0 +1,68 @@
+#!/usr/bin/python3
+"""Privileged helper for oss. Invoked by pkexec, never directly.
+
+Takes exactly one argument: the path to a JSON file describing which catalogue
+flags to set. It re-loads the shipped catalogue itself and re-renders every file
+from that, so the only thing it trusts from the caller is a mapping of flag ids
+to values — each of which is checked against the catalogue's own allowlist before
+anything is written (BUILD_PLAN §9).
+
+    oss-helper /path/to/payload.json
+
+Prints a JSON result on stdout. Exit status is 0 when the transaction succeeded,
+1 when it failed (and was rolled back), 2 for a bad invocation.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, "/usr/lib/oss")
+
+from ossgui import catalogue as catalogue_module  # noqa: E402
+from ossgui.apply import Result, run_payload  # noqa: E402
+
+#: A payload bigger than this is not something we produced.
+MAX_PAYLOAD_BYTES = 1 << 20
+
+
+def fail(message: str, code: int = 2) -> int:
+    print(Result(ok=False, error=message).to_json())
+    return code
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 2:
+        return fail(f"usage: {os.path.basename(argv[0])} <payload.json>")
+
+    if os.geteuid() != 0:
+        return fail("this helper must run as root, via pkexec")
+
+    payload_path = Path(argv[1])
+    try:
+        if payload_path.is_symlink():
+            return fail("payload path is a symlink")
+        size = payload_path.stat().st_size
+        if size > MAX_PAYLOAD_BYTES:
+            return fail(f"payload is {size} bytes, over the {MAX_PAYLOAD_BYTES} limit")
+        payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        return fail(f"cannot read payload: {exc}")
+    except json.JSONDecodeError as exc:
+        return fail(f"payload is not valid JSON: {exc}")
+
+    try:
+        loaded = catalogue_module.load()
+    except catalogue_module.CatalogueError as exc:
+        return fail(f"catalogue is unusable: {exc}", 1)
+
+    result = run_payload(loaded, payload)
+    print(result.to_json())
+    return 0 if result.ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

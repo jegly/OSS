@@ -1,0 +1,12 @@
+#!/usr/bin/python3
+"""Launcher for the OSS GUI."""
+
+import sys
+
+# Installed layout; harmless in the dev tree where the package is found first.
+sys.path.insert(0, "/usr/lib/oss")
+
+from ossgui.ui.app import main
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

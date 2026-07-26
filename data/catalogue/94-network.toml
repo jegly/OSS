@@ -6,7 +6,7 @@ title   = "network"
 nav     = "Network"
 order   = 94
 syntax  = "ini"
-target  = "/etc/NetworkManager/conf.d/99-hardening-gui.conf"
+target  = "/etc/NetworkManager/conf.d/99-oss.conf"
 reload  = [["/usr/bin/systemctl", "reload", "NetworkManager.service"]]
 desc    = "MAC-address privacy and LAN name-broadcast settings in NetworkManager."
 

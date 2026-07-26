@@ -10,16 +10,16 @@ override_dh_auto_test:
 	python3 -m unittest discover -s tests
 
 override_dh_auto_install:
-	install -d debian/hardening-gui/usr/lib/hardening-gui
-	cp -r src/hardeninggui debian/hardening-gui/usr/lib/hardening-gui/
-	find debian/hardening-gui -name '__pycache__' -type d -exec rm -rf {} +
-	install -D -m 0755 hardening-gui debian/hardening-gui/usr/bin/hardening-gui
-	install -D -m 0755 helper/hardening-gui-helper \
-	        debian/hardening-gui/usr/libexec/hardening-gui-helper
-	install -D -m 0644 data/polkit/org.hardening.ControlCenter.policy \
-	        debian/hardening-gui/usr/share/polkit-1/actions/org.hardening.ControlCenter.policy
-	install -D -m 0644 data/desktop/hardening-gui.desktop \
-	        debian/hardening-gui/usr/share/applications/hardening-gui.desktop
-	install -d debian/hardening-gui/usr/share/hardening-gui
+	install -d debian/oss/usr/lib/oss
+	cp -r src/ossgui debian/oss/usr/lib/oss/
+	find debian/oss -name '__pycache__' -type d -exec rm -rf {} +
+	install -D -m 0755 oss debian/oss/usr/bin/oss
+	install -D -m 0755 helper/oss-helper \
+	        debian/oss/usr/libexec/oss-helper
+	install -D -m 0644 data/polkit/io.github.jegly.OSS.policy \
+	        debian/oss/usr/share/polkit-1/actions/io.github.jegly.OSS.policy
+	install -D -m 0644 data/desktop/oss.desktop \
+	        debian/oss/usr/share/applications/oss.desktop
+	install -d debian/oss/usr/share/oss
 	cp -r data/catalogue data/presets data/themes \
-	        debian/hardening-gui/usr/share/hardening-gui/
+	        debian/oss/usr/share/oss/

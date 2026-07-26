@@ -7,7 +7,7 @@ title   = "grub"
 nav     = "System"
 order   = 20
 syntax  = "grub"
-target  = "/etc/default/grub.d/99-hardening-gui.cfg"
+target  = "/etc/default/grub.d/99-oss.cfg"
 reload  = [["/usr/sbin/update-grub"]]
 desc    = "Kernel command-line hardening. Every flag here needs a reboot."
 
