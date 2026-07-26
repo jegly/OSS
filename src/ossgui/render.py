@@ -224,8 +224,14 @@ def _body_logindefs(pairs: list[tuple[Flag, str]], current: str) -> str:
         key = match.group(1) if match else None
         if key in wanted and not line.lstrip().startswith("#"):
             if key not in seen:
-                out.append(f"{key}\t{wanted[key]}\n")
                 seen.add(key)
+                # Leave the line exactly as it is when it already says what we
+                # want. Rewriting `KEY value` as `KEY\tvalue` is a diff that
+                # changes nothing, and it makes the review claim the file is
+                # being modified when it is not.
+                existing = line.split(None, 1)
+                already = len(existing) > 1 and existing[1].strip() == wanted[key]
+                out.append(line if already else f"{key}\t{wanted[key]}\n")
             continue  # drop duplicate assignments of a managed key
         out.append(line)
     missing = [(k, v) for k, v in wanted.items() if k not in seen]
@@ -303,11 +309,15 @@ def render_section(
     touched = False
     for target in section.targets():
         pairs = [(f, v) for f, v in all_pairs if section.target_for(f) == target]
-        syntax = section.syntax
-        in_place = section.in_place
-        if pairs:
-            syntax = section.syntax_for(pairs[0][0])
-            in_place = pairs[0][0].in_place or section.in_place
+
+        # Work out what kind of file this is from *every* flag that targets it,
+        # not just the selected ones. With nothing selected there are no pairs to
+        # consult, and treating a pre-existing system file as a drop-in we own
+        # meant proposing to delete it — /etc/security/faillock.conf is shipped by
+        # the pam package, not by us.
+        owning = [f for f in section.flags if section.target_for(f) == target]
+        syntax = section.syntax_for(owning[0]) if owning else section.syntax
+        in_place = section.in_place or any(f.in_place for f in owning)
 
         if syntax == "logindefs":
             if not pairs:

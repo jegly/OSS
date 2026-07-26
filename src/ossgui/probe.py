@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from . import branding
 from .catalogue import Catalogue, Flag, Section
 
 #: How long any probe subprocess gets before we give up on it.
@@ -390,11 +391,25 @@ def _cmdline_value(cmdline: list[str], key: str) -> str | None:
     return found
 
 
+def is_ours(content: str) -> bool:
+    """Whether this file was written by us, judged by the banner we stamp on it.
+
+    Only meaningful for in-place targets — a file like /etc/login.defs or
+    faillock.conf exists whether or not we have ever touched it, so reading a
+    hardened value out of one says nothing about who set it. Treating those as
+    "ours" made the app adopt the pam package's own defaults and then rewrite the
+    file to say the same thing.
+    """
+    return branding.MARKER in content
+
+
 def on_disk_value(section: Section, flag: Flag, facts: SystemFacts) -> str | None:
     """What our own drop-in currently says for this flag, or None if absent."""
     target = section.target_for(flag)
     content = facts.files.get(target)
     if content is None:
+        return None
+    if (flag.in_place or section.in_place) and not is_ours(content):
         return None
     syntax = section.syntax_for(flag)
 

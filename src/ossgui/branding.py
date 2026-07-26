@@ -25,6 +25,16 @@ ART = r"""  ___  ____ ____
 
 COMMENT = "#"
 
+#: How the app recognises a file as its own. Needed for the targets we edit in
+#: place — /etc/login.defs exists whether or not we have touched it, so the only
+#: way to tell our edit from the distribution's original is a mark we left.
+#:
+#: It is a distinct constant rather than a phrase lifted out of the banner text,
+#: because the two must not drift apart: when the banner was changed to the ASCII
+#: art the old "Managed by OSS" line disappeared, and the recogniser silently
+#: stopped matching anything at all.
+MARKER = f"{NAME} — {TAGLINE}"
+
 
 def _comment(text: str) -> str:
     """Prefix each line, leaving blank lines as a bare comment character."""
@@ -35,8 +45,8 @@ def _comment(text: str) -> str:
 
 
 def header(footer: str) -> str:
-    """The art, the tagline, and one line saying how to undo this file."""
-    return _comment(f"{ART}\n\n{TAGLINE}\n\nDo not edit by hand.\n{footer}")
+    """The art, the marker, and one line saying how to undo this file."""
+    return _comment(f"{ART}\n\n{MARKER}\n\nDo not edit by hand.\n{footer}")
 
 
 #: For a drop-in we own outright: deleting it is the undo.

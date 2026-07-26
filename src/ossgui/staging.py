@@ -32,13 +32,25 @@ class Staging:
 
     @classmethod
     def from_system(cls, catalogue: Catalogue, facts: SystemFacts) -> "Staging":
-        """Start with the machine's current state as both baseline and selection."""
+        """Start from what *this app's own files* declare — nothing else.
+
+        Seeding from everything currently in effect looks helpful and is a trap:
+        on a machine hardened by hand, 248 settings live in the user's own files,
+        so the first toggle of anything would drag all 248 into our drop-in and
+        write four files the user never asked to touch. The staged selection is a
+        statement of intent about what this app will write, so it starts as only
+        what this app has already written.
+
+        Settings in effect from elsewhere still *show* as applied — the status dot
+        reads the live system (§6). Adopting them is a deliberate act: the
+        dashboard's vendor-layer migration, or Capture.
+        """
         states = all_states(catalogue, facts)
-        baseline = {}
-        for flag_id, state in states.items():
-            if state.state in (State.APPLIED, State.PENDING_REBOOT):
-                flag = catalogue.flags[flag_id]
-                baseline[flag_id] = state.on_disk or state.live or flag.value
+        baseline = {
+            flag_id: state.on_disk
+            for flag_id, state in states.items()
+            if state.on_disk is not None
+        }
         return cls(catalogue=catalogue, selection=dict(baseline), baseline=baseline)
 
     # -- listeners --------------------------------------------------------- #

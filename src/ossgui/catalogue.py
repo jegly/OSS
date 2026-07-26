@@ -279,6 +279,15 @@ def _parse_flag(raw: dict, section: Section, path: Path) -> Flag:
     if syntax and syntax not in SYNTAXES:
         raise CatalogueError(f"{where}: unknown syntax {syntax!r}")
 
+    # `logindefs` means editing /etc/login.defs, which exists whether or not we
+    # have ever touched it. Deriving in_place from the syntax rather than trusting
+    # the data to remember the field: when it was left off, the app adopted the
+    # file's stock values as settings it manages, so PASS_MAX_DAYS 99999 showed as
+    # an enabled hardening flag.
+    in_place = bool(raw.get("in_place", section.in_place))
+    if (syntax or section.syntax) == "logindefs":
+        in_place = True
+
     return Flag(
         id=flag_id,
         section=section.id,
@@ -304,7 +313,7 @@ def _parse_flag(raw: dict, section: Section, path: Path) -> Flag:
         syntax=syntax,
         ini_section=str(raw.get("ini_section", "")),
         apply_last=bool(raw.get("apply_last", False)),
-        in_place=bool(raw.get("in_place", section.in_place)),
+        in_place=in_place,
         editable=editable,
         pattern=pattern,
     )

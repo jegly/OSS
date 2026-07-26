@@ -287,3 +287,118 @@ class TestDirectoryMode(SandboxCase):
         apply.write_atomic(target, "minlen = 14\n", 0o644)
         mode = target.parent.stat().st_mode & 0o777
         self.assertEqual(mode, 0o755, f"directory created {mode:04o}")
+
+
+class TestStagingIsMinimal(SandboxCase):
+    """One toggle must propose one change, not adopt the whole machine.
+
+    Seeding the staged selection from everything currently in effect looked
+    helpful and was a trap: on a hand-hardened machine that is hundreds of
+    settings living in the user's own files, so the first toggle of anything
+    dragged them all into our drop-in and wrote several files nobody asked to
+    touch.
+    """
+
+    def _staging(self):
+        from ossgui.staging import Staging
+
+        facts = probe.gather(self.catalogue)
+        return Staging.from_system(self.catalogue, facts), facts
+
+    def test_nothing_staged_means_an_empty_plan(self) -> None:
+        staging, _facts = self._staging()
+        self.assertEqual(staging.changed_count, 0)
+        plan = render.render(
+            self.catalogue,
+            staging.selection,
+            current=probe.read_target_files(self.catalogue),
+        )
+        self.assertTrue(plan.is_empty, "a freshly opened app must propose nothing")
+
+    def test_one_toggle_touches_one_file(self) -> None:
+        staging, _facts = self._staging()
+        staging.set("printk_quiet", "3 3 3 3")
+        self.assertEqual(staging.changed_ids(), ["printk_quiet"])
+
+        plan = render.render(
+            self.catalogue,
+            staging.selection,
+            current=probe.read_target_files(self.catalogue),
+        )
+        self.assertEqual([w.path for w in plan.writes], ["/etc/sysctl.d/99-oss.conf"])
+        body = [l for l in plan.writes[0].content.splitlines() if l and not l.startswith("#")]
+        self.assertEqual(body, ["kernel.printk = 3 3 3 3"])
+
+
+class TestInPlaceFilesAreNotOurs(SandboxCase):
+    """A system file is not a drop-in, and must not be treated as one."""
+
+    def test_never_proposes_deleting_a_system_file(self) -> None:
+        """faillock.conf ships with pam. With nothing selected, leave it alone."""
+        plan = render.render(
+            self.catalogue,
+            {},
+            current={"/etc/security/faillock.conf": "# stock pam file\ndeny = 3\n"},
+        )
+        removed = [r.path for r in plan.removes]
+        self.assertNotIn("/etc/security/faillock.conf", removed)
+
+    def test_still_removes_a_dropin_we_own(self) -> None:
+        plan = render.render(
+            self.catalogue, {}, current={"/etc/sysctl.d/99-oss.conf": "kernel.x = 1\n"}
+        )
+        self.assertIn("/etc/sysctl.d/99-oss.conf", [r.path for r in plan.removes])
+
+    def test_logindefs_flags_are_in_place_by_syntax(self) -> None:
+        """Derived from the syntax, so the data cannot forget to say so."""
+        section = self.catalogue.section("pam")
+        logindefs = [f for f in section.flags if section.syntax_for(f) == "logindefs"]
+        self.assertTrue(logindefs)
+        for flag in logindefs:
+            self.assertTrue(flag.in_place, f"{flag.id} should be in-place")
+
+    def test_a_system_files_own_values_are_not_adopted(self) -> None:
+        """Reading a value out of login.defs says nothing about who set it."""
+        section = self.catalogue.section("pam")
+        flag = next(f for f in section.flags if f.key == "PASS_MAX_DAYS")
+        facts = probe.SystemFacts(
+            files={"/etc/login.defs": "PASS_MAX_DAYS\t99999\n"},
+            cmdline=[], modules={}, units={}, gsettings={}, vulnerabilities={},
+        )
+        self.assertIsNone(probe.on_disk_value(section, flag, facts))
+
+    def test_our_own_in_place_edit_is_recognised(self) -> None:
+        """Once we have written it, the banner is how we know it is ours."""
+        from ossgui import branding
+
+        section = self.catalogue.section("pam")
+        flag = next(f for f in section.flags if f.key == "PASS_MAX_DAYS")
+        facts = probe.SystemFacts(
+            files={"/etc/login.defs": branding.IN_PLACE + "PASS_MAX_DAYS\t365\n"},
+            cmdline=[], modules={}, units={}, gsettings={}, vulnerabilities={},
+        )
+        self.assertEqual(probe.on_disk_value(section, flag, facts), "365")
+
+    def test_matching_logindefs_value_is_not_rewritten(self) -> None:
+        """A whitespace-only diff would claim the file is changing when it is not."""
+        current = {"/etc/login.defs": "UMASK 077\n"}
+        section = self.catalogue.section("pam")
+        flag = next(f for f in section.flags if f.key == "UMASK")
+        plan = render.render_section(section, {flag.id: "077"}, current=current)
+        self.assertEqual(plan.writes, [], "identical content must not be rewritten")
+
+    def test_the_marker_is_actually_in_the_banner(self) -> None:
+        """The recogniser and the banner must not drift apart.
+
+        They did once: changing the banner to ASCII art removed the phrase the
+        recogniser was looking for, so it silently matched nothing and the app
+        could not identify its own in-place edits.
+        """
+        from ossgui import branding
+
+        for banner in (branding.DROPIN, branding.IN_PLACE):
+            self.assertTrue(
+                probe.is_ours(banner),
+                "a file carrying this banner must be recognised as ours",
+            )
+        self.assertFalse(probe.is_ours("# just some other config file\n"))
