@@ -90,6 +90,8 @@ class MainWindow(Adw.ApplicationWindow):
         #: Package names selected for removal, and apt's answer about them.
         self.package_removals: set[str] = set()
         self.package_cascade = None
+        #: path -> {"mode","owner","group","durable","immutable"} for any path.
+        self.filemode_changes: dict[str, dict] = {}
 
         self.states = probe.all_states(catalogue, facts, staging.selection)
         self.unaffected = probe.unaffected_mitigations(catalogue, facts)
@@ -664,6 +666,8 @@ class MainWindow(Adw.ApplicationWindow):
             extras["bootloader"] = dict(self.bootloader_change)
         if self.usb_change:
             extras["usb"] = dict(self.usb_change)
+        if self.filemode_changes:
+            extras["filemode"] = dict(self.filemode_changes)
         return extras
 
     def firewall_changes(self) -> list[tuple[list[str], str]]:
@@ -687,6 +691,7 @@ class MainWindow(Adw.ApplicationWindow):
             + len(self.usb_change)
             + len(self.snap_changes)
             + len(self.package_removals)
+            + len(self.filemode_changes)
             + (1 if self.bootloader_change else 0)
         )
         if count:

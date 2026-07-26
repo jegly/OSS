@@ -27,6 +27,7 @@ from pathlib import Path
 
 from . import apparmor as apparmor_module
 from . import bootloader as bootloader_module
+from . import filemode as filemode_module
 from . import fstab as fstab_module
 from . import permissions as permissions_module
 from . import probe, render, ufw as ufw_module, units as units_module
@@ -382,6 +383,8 @@ def apply_plan(
             apply_fstab(extras["fstab"], result)
         if "usb" in extras:
             apply_usb(extras["usb"], result)
+        if "filemode" in extras:
+            apply_filemode(extras["filemode"], result)
 
         # Package removal goes last of all: it is the only step that cannot be
         # rolled back by restoring a file, so everything else should already have
@@ -706,6 +709,56 @@ def apply_permissions(changes: list, result: Result) -> None:
             )
 
 
+def apply_filemode(changes: list, result: Result) -> None:
+    """Change the mode of arbitrary paths, journalling the before-state first.
+
+    A statoverride is recorded through dpkg so a package upgrade cannot quietly
+    put the old mode back; a plain chmod is done here so the rollback journal is
+    written before the change, not after.
+    """
+    import json as json_module
+
+    journal_path = target_path(str(permissions_module.JOURNAL_PATH))
+    try:
+        journal = json_module.loads(journal_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        journal = []
+
+    for change in changes:
+        path = target_path(change.path)
+        if not path.exists():
+            result.steps.append(
+                Step("write", f"{change.path} does not exist", False, "skipped")
+            )
+            continue
+
+        stat = path.lstat()
+        change.before_mode = stat.st_mode & 0o7777
+        journal.append({
+            "path": change.path,
+            "before_mode": change.before_mode,
+            "before_uid": stat.st_uid,
+            "before_gid": stat.st_gid,
+            "after_mode": change.mode,
+            "durable": change.durable,
+        })
+        journal_path.parent.mkdir(parents=True, exist_ok=True)
+        write_atomic(journal_path, json_module.dumps(journal, indent=1), 0o600)
+
+        if not change.durable:
+            os.chmod(path, change.mode)
+            result.steps.append(Step("write", change.summary))
+
+    # The durable form and the immutable flag are programs, so they run after the
+    # journal is safely on disk.
+    for argv, why in filemode_module.plan_commands(changes):
+        code, output = run(argv)
+        ok = code == 0
+        result.steps.append(Step("command", " ".join(argv), ok, output))
+        if not ok:
+            raise ApplyError(f"{why} failed: {output}")
+
+
 def apply_fstab(changes: dict[str, set[str]], result: Result) -> None:
     """Test every option set with a live remount before touching fstab (§4.10).
 
@@ -846,6 +899,7 @@ def run_payload(catalogue: Catalogue, payload: dict) -> Result:
         "permissions": (permissions_module.from_payload, permissions_module.PermissionError_),
         "fstab": (fstab_module.from_payload, fstab_module.FstabError),
         "usb": (usb_module.from_payload, usb_module.UsbError),
+        "filemode": (filemode_module.from_payload, filemode_module.ModeError),
     }
     for key, (parser, error_type) in parsers.items():
         if key in payload:

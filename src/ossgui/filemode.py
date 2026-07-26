@@ -327,3 +327,123 @@ def mode_string(mode: int) -> str:
     from .permissions import mode_string as shared
 
     return shared(mode)
+
+# --------------------------------------------------------------------------- #
+#  Explaining a mode in words
+# --------------------------------------------------------------------------- #
+
+#: What each bit means, and how that differs between a file and a directory.
+#: The directory meanings are the ones people get wrong: execute is traversal,
+#: not "run", and read without execute lets you list names and nothing else.
+BIT_HELP = {
+    "r": (
+        "Read the contents of the file.",
+        "List the names inside the directory. Without execute as well, that is all "
+        "you can do — you cannot look at anything in it.",
+    ),
+    "w": (
+        "Change or overwrite the file.",
+        "Create, rename and delete entries in the directory. This is what lets "
+        "someone delete a file they cannot write to.",
+    ),
+    "x": (
+        "Run the file as a program.",
+        "Enter the directory and reach things inside it by name. A directory "
+        "without this is unusable even if it is readable.",
+    ),
+}
+
+SPECIAL_HELP = {
+    "setuid": (
+        "Run as the file's owner rather than as whoever started it. This is how "
+        "an ordinary user runs something as root, and it is why setuid binaries "
+        "are the first thing an attacker looks for. Meaningless on a directory."
+    ),
+    "setgid": (
+        "On a file, run with the file's group. On a directory, new files inside "
+        "inherit the directory's group rather than the creator's — which is how "
+        "shared directories are usually set up."
+    ),
+    "sticky": (
+        "On a directory, only the owner of a file may delete it, even if others "
+        "can write to the directory. This is what makes /tmp safe to share, and "
+        "why /tmp is 1777 rather than 777."
+    ),
+}
+
+WHO = (("owner", 0o700, 6), ("group", 0o070, 3), ("others", 0o007, 0))
+
+
+def describe_mode(mode: int, is_dir: bool = False) -> str:
+    """A mode in plain words, for the picker's live readout."""
+    kind = 1 if is_dir else 0
+    verbs = {
+        "r": ("read it", "list it")[kind],
+        "w": ("change it", "add and delete things in it")[kind],
+        "x": ("run it", "enter it")[kind],
+    }
+
+    lines = []
+    for label, mask, shift in WHO:
+        bits = (mode & mask) >> shift
+        allowed = [verbs[c] for c, bit in (("r", 4), ("w", 2), ("x", 1)) if bits & bit]
+        if not allowed:
+            lines.append(f"{label}: no access at all")
+        else:
+            lines.append(f"{label}: can " + ", ".join(allowed))
+
+    extras = []
+    if mode & 0o4000:
+        extras.append("runs as the owner (setuid)")
+    if mode & 0o2000:
+        extras.append(
+            "new files inherit the group (setgid)" if is_dir else "runs as the group (setgid)"
+        )
+    if mode & 0o1000:
+        extras.append(
+            "only a file's owner can delete it (sticky)" if is_dir else "sticky bit set"
+        )
+    if extras:
+        lines.append("also: " + "; ".join(extras))
+
+    return "\n".join(lines)
+
+
+def consequences(mode: int, target: "Target") -> list[str]:
+    """Things worth saying out loud about this particular choice."""
+    out = []
+
+    if target.is_dir and not mode & 0o100:
+        out.append(
+            "The owner cannot enter this directory. Everything inside becomes "
+            "unreachable by name, even for the owner."
+        )
+    if not target.is_dir and mode & 0o111 == 0 and target.mode & 0o111:
+        out.append(
+            "This removes execute from a file that currently has it. If it is a "
+            "program, it stops running."
+        )
+    if mode & 0o444 and not target.is_dir and mode & 0o111 == 0:
+        out.append(
+            "It stays readable, so anyone who can read it can copy it elsewhere "
+            "and run the copy. Use 0700 or 0000 if that matters."
+        )
+    if mode & 0o002:
+        out.append(
+            "World-writable. Any user on the machine can change this. Almost "
+            "never what you want."
+        )
+    if mode & 0o4000 and not target.is_dir:
+        out.append(
+            "Setuid. Anyone who can run this runs it as "
+            f"{target.owner or 'its owner'}. Only correct for a program written "
+            "to expect it."
+        )
+    if mode == 0 :
+        out.append(
+            "No access for anyone. Root can still change it back, but nothing "
+            "else can read or run it."
+        )
+    if target.packaged:
+        out.append(target.durability_note)
+    return out

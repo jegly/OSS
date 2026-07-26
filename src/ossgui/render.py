@@ -45,6 +45,8 @@ ALLOWED_COMMANDS = frozenset(
         "/usr/sbin/aa-status",
         "/usr/bin/snap",
         "/usr/bin/apt-get",
+        "/usr/bin/dpkg-statoverride",
+        "/usr/bin/chattr",
     }
 )
 

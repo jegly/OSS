@@ -389,3 +389,89 @@ class TestPackages(unittest.TestCase):
         ]
         self.assertEqual(found, ["cowsay", "fortune"])
         self.assertFalse([l for l in sample.splitlines() if l.startswith("E:")])
+
+
+class TestFileMode(unittest.TestCase):
+    """Arbitrary path mode changes."""
+
+    def test_refuses_paths_that_would_leave_no_way_back(self) -> None:
+        from ossgui import filemode
+        for path in ("/usr/bin/dpkg", "/bin/sh", "/usr/bin/pkexec", "/usr/bin/sudo",
+                     "/usr/bin/chmod", "/usr/lib/systemd/systemd"):
+            with self.assertRaises(filemode.ModeError, msg=path):
+                filemode.check_allowed(path, 0o000)
+
+    def test_refuses_system_directories(self) -> None:
+        from ossgui import filemode
+        for path in ("/", "/usr", "/etc", "/var"):
+            with self.assertRaises(filemode.ModeError, msg=path):
+                filemode.check_allowed(path, 0o700)
+
+    def test_rejects_traversal_and_relative_paths(self) -> None:
+        from ossgui import filemode
+        for path in ("../etc/shadow", "/etc/../etc/shadow", "relative/path", ""):
+            with self.assertRaises(filemode.ModeError, msg=path):
+                filemode.validate_path(path)
+
+    def test_rejects_an_out_of_range_mode(self) -> None:
+        from ossgui import filemode
+        for mode in (-1, 0o10000, 99999):
+            with self.assertRaises(filemode.ModeError):
+                filemode.validate_mode(mode)
+
+    def test_allows_an_ordinary_binary(self) -> None:
+        from ossgui import filemode
+        filemode.check_allowed("/usr/bin/ssh", 0o644)
+
+    def test_statoverride_applies_now_as_well_as_later(self) -> None:
+        """--update is what makes it take effect immediately, not at next unpack."""
+        from ossgui import filemode
+        argv = filemode.statoverride_argv("/usr/bin/ssh", 0o644)
+        self.assertIn("--update", argv)
+        self.assertIn("--add", argv)
+        self.assertEqual(argv[-2:], ["0644", "/usr/bin/ssh"])
+
+    def test_owner_names_are_validated(self) -> None:
+        from ossgui import filemode
+        with self.assertRaises(filemode.ModeError):
+            filemode.statoverride_argv("/usr/bin/ssh", 0o644, owner="root; id")
+
+    def test_directory_meanings_differ_from_files(self) -> None:
+        """Execute on a directory is traversal, not 'run'. Getting this wrong is
+        the most common permissions mistake there is."""
+        from ossgui import filemode
+        as_file = filemode.describe_mode(0o700, is_dir=False)
+        as_dir = filemode.describe_mode(0o700, is_dir=True)
+        self.assertIn("run it", as_file)
+        self.assertIn("enter it", as_dir)
+        self.assertNotEqual(as_file, as_dir)
+
+    def test_no_access_is_described_as_such(self) -> None:
+        from ossgui import filemode
+        self.assertIn("no access at all", filemode.describe_mode(0o000))
+
+    def test_readable_but_not_executable_is_flagged_as_copyable(self) -> None:
+        """0644 on a binary does not stop anyone copying it and running the copy."""
+        from ossgui import filemode
+        target = filemode.Target(
+            path="/usr/bin/ssh", exists=True, mode=0o755, owner="root", group="root"
+        )
+        notes = " ".join(filemode.consequences(0o644, target))
+        self.assertIn("copy", notes)
+
+    def test_packaged_paths_warn_about_upgrades(self) -> None:
+        from ossgui import filemode
+        target = filemode.Target(
+            path="/usr/bin/ssh", exists=True, mode=0o755, package="openssh-client"
+        )
+        self.assertIn("upgraded", " ".join(filemode.consequences(0o644, target)))
+
+    def test_payload_validates_every_entry(self) -> None:
+        from ossgui import filemode
+        changes = filemode.from_payload(
+            {"/usr/bin/ssh": {"mode": 0o644, "durable": True}}
+        )
+        self.assertEqual(changes[0].mode, 0o644)
+        self.assertTrue(changes[0].durable)
+        with self.assertRaises(filemode.ModeError):
+            filemode.from_payload({"/usr/bin/dpkg": {"mode": 0}})

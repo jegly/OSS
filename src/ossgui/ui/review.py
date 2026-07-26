@@ -336,6 +336,7 @@ class ReviewDialog(Adw.Window):
                 "fstab": "mount option change (remount-tested first)",
                 "bootloader": "boot password",
                 "usb": "USB policy",
+                "filemode": "file or folder permission change",
             }
             for key, value in extras.items():
                 count = len(value) if isinstance(value, dict) else 1

@@ -15,6 +15,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
 from .. import bootloader as bootloader_module  # noqa: E402
+from .. import filemode as filemode_module  # noqa: E402
 from .. import fstab as fstab_module  # noqa: E402
 from .. import permissions as permissions_module  # noqa: E402
 from .. import sandbox as sandbox_module  # noqa: E402
@@ -294,12 +295,62 @@ class PermissionsPage(Gtk.Box):
 
     def _build(self) -> Gtk.Widget:
         return _column(
+            self._custom_group(),
             self._table_group("recommended"),
             self._table_group("aggressive"),
             self._do_not_change_group(),
             self._suid_group(),
             self._scans_group(),
         )
+
+    def _custom_group(self) -> Adw.PreferencesGroup:
+        """Any path, not just the recommended list."""
+        staged = self.window.filemode_changes
+        group = Adw.PreferencesGroup(
+            title="Any file or folder",
+            description=(
+                "The table below covers paths worth fixing on any machine. This is "
+                "for a specific one: pick it, set who can read, change and run it, "
+                "and see what that means before anything happens. No terminal."
+            ),
+        )
+
+        row = _row(
+            "Set permissions on a file or folder",
+            "Opens a picker and a permission grid, with an explanation of each "
+            "choice as you make it.",
+        )
+        button = Gtk.Button(label="Choose…", valign=Gtk.Align.CENTER)
+        button.add_css_class("suggested-action")
+        button.connect("clicked", self._on_custom)
+        row.add_suffix(button)
+        group.add(row)
+
+        for path, spec in sorted(staged.items()):
+            mode = spec["mode"]
+            how = "statoverride, survives upgrades" if spec.get("durable") else "chmod"
+            extra = ", immutable" if spec.get("immutable") else ""
+            entry = _row(
+                path,
+                f"{mode:04o}  {filemode_module.mode_string(mode)}  ({how}{extra})",
+            )
+            remove = Gtk.Button(icon_name="user-trash-symbolic", valign=Gtk.Align.CENTER)
+            remove.add_css_class("flat")
+            remove.set_tooltip_text("Unstage this change")
+            remove.connect("clicked", self._on_unstage, path)
+            entry.add_suffix(remove)
+            group.add(entry)
+        return group
+
+    def _on_custom(self, _button: Gtk.Button) -> None:
+        from .mode_dialog import ModeDialog
+
+        ModeDialog(self.window).present()
+
+    def _on_unstage(self, _button: Gtk.Button, path: str) -> None:
+        self.window.filemode_changes.pop(path, None)
+        self.window._refresh_chrome()
+        self._rebuild()
 
     def _table_group(self, tier: str) -> Adw.PreferencesGroup:
         rows = [
