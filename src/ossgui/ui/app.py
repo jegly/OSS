@@ -98,7 +98,7 @@ class OssApplication(Adw.Application):
         about = Adw.AboutWindow(
             transient_for=self.window,
             application_name="OSS",
-            application_icon="security-high",
+            application_icon=paths.APP_ID,
             version=__version__,
             comments=(
                 "Pick hardening flags, review the exact diff, apply once.\n\n"

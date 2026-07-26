@@ -6,7 +6,7 @@
 
   <vendor>OSS</vendor>
 
-  <action id="io.github.jegly.OSS.apply">
+  <action id="com.jegly.OSS.apply">
     <description>Apply system hardening settings</description>
     <message>Authentication is required to change system hardening settings</message>
     <icon_name>security-high</icon_name>

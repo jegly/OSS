@@ -48,7 +48,7 @@ contents=$(dpkg-deb -c "$DEB")
 for path in \
     ./usr/bin/oss \
     ./usr/libexec/oss-helper \
-    ./usr/share/polkit-1/actions/io.github.jegly.OSS.policy \
+    ./usr/share/polkit-1/actions/com.jegly.OSS.policy \
     ./usr/share/applications/oss.desktop \
     ./usr/share/oss/catalogue/10-sysctl.toml \
     ./usr/share/oss/themes/ptyxis.toml \

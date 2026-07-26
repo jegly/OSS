@@ -85,7 +85,7 @@ def main() -> int:
         font=args.font,
     )
 
-    application = Adw.Application(application_id="io.github.jegly.OSS.Screenshot")
+    application = Adw.Application(application_id="com.jegly.OSS.Screenshot")
     status = {"ok": False}
 
     def on_activate(app: Adw.Application) -> None:

@@ -16,8 +16,8 @@ override_dh_auto_install:
 	install -D -m 0755 oss debian/oss/usr/bin/oss
 	install -D -m 0755 helper/oss-helper \
 	        debian/oss/usr/libexec/oss-helper
-	install -D -m 0644 data/polkit/io.github.jegly.OSS.policy \
-	        debian/oss/usr/share/polkit-1/actions/io.github.jegly.OSS.policy
+	install -D -m 0644 data/polkit/com.jegly.OSS.policy \
+	        debian/oss/usr/share/polkit-1/actions/com.jegly.OSS.policy
 	install -D -m 0644 data/desktop/oss.desktop \
 	        debian/oss/usr/share/applications/oss.desktop
 	install -d debian/oss/usr/share/oss

@@ -24,15 +24,15 @@ MOVES = [
     ("oss", "oss"),
     ("helper/oss-helper", "helper/oss-helper"),
     (
-        "data/polkit/io.github.jegly.OSS.policy",
-        "data/polkit/io.github.jegly.OSS.policy",
+        "data/polkit/com.jegly.OSS.policy",
+        "data/polkit/com.jegly.OSS.policy",
     ),
     ("data/desktop/oss.desktop", "data/desktop/oss.desktop"),
 ]
 
 #: Longest patterns first, so "oss-helper" is not eaten by "oss".
 SUBS = [
-    ("io.github.jegly.OSS", "io.github.jegly.OSS"),
+    ("com.jegly.OSS", "com.jegly.OSS"),
     ("OSS", "OSS"),
     ("oss-helper", "oss-helper"),
     ("oss-fonts", "oss-fonts"),

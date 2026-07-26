@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-APP_ID = "io.github.jegly.OSS"
+APP_ID = "com.jegly.OSS"
 PROG = "oss"
 
 #: Marker file that identifies a data directory.

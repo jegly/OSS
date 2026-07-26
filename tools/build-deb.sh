@@ -14,10 +14,14 @@ find "$STAGE" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 
 install -D -m 0755 oss "$STAGE/usr/bin/oss"
 install -D -m 0755 helper/oss-helper "$STAGE/usr/libexec/oss-helper"
-install -D -m 0644 data/polkit/io.github.jegly.OSS.policy \
-        "$STAGE/usr/share/polkit-1/actions/io.github.jegly.OSS.policy"
+install -D -m 0644 data/polkit/com.jegly.OSS.policy \
+        "$STAGE/usr/share/polkit-1/actions/com.jegly.OSS.policy"
 install -D -m 0644 data/desktop/oss.desktop \
         "$STAGE/usr/share/applications/oss.desktop"
+if [ -d data/icons ]; then
+    install -d "$STAGE/usr/share/icons"
+    cp -r data/icons/hicolor "$STAGE/usr/share/icons/"
+fi
 install -d "$STAGE/usr/share/oss"
 cp -r data/catalogue data/presets data/themes "$STAGE/usr/share/oss/"
 
@@ -54,6 +58,9 @@ set -e
 if [ "$1" = configure ]; then
     if command -v update-desktop-database >/dev/null 2>&1; then
         update-desktop-database -q /usr/share/applications || true
+    fi
+    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+        gtk-update-icon-cache -qtf /usr/share/icons/hicolor 2>/dev/null || true
     fi
 fi
 exit 0
