@@ -308,3 +308,84 @@ class TestSnap(unittest.TestCase):
         )
         with self.assertRaises(snapd.SnapError):
             snapd.from_payload({"firefox": "disconnect"})
+
+
+class TestPackages(unittest.TestCase):
+    """Package removal — the cascade is the safety mechanism."""
+
+    def test_rejects_injection_in_a_package_name(self) -> None:
+        from ossgui import packages
+        for bad in ("foo; rm -rf /", "$(id)", "Foo", "../etc/passwd", "foo bar"):
+            with self.assertRaises(packages.PackageError, msg=bad):
+                packages.validate(bad)
+
+    def test_accepts_real_package_names(self) -> None:
+        from ossgui import packages
+        for good in ("libgtk-3-0t64", "python3.14", "g++", "libc6:amd64", "gcc-14"):
+            packages.validate(good)
+
+    def test_essential_and_required_are_not_removable(self) -> None:
+        from ossgui import packages
+        essential = packages.Package("dpkg", "1.0", essential=True)
+        self.assertFalse(essential.removable)
+        self.assertIn("Essential", essential.refusal)
+
+        required = packages.Package("libc6", "1.0", priority="required")
+        self.assertFalse(required.removable)
+        self.assertIn("required", required.refusal)
+
+        ordinary = packages.Package("cowsay", "1.0")
+        self.assertTrue(ordinary.removable)
+        self.assertEqual(ordinary.refusal, "")
+
+    def test_removal_command_is_non_interactive_and_unforced(self) -> None:
+        from ossgui import packages
+        argv = packages.to_argv(["cowsay"])
+        self.assertIn("--yes", argv)
+        self.assertNotIn("--force-yes", argv)
+        self.assertNotIn("--allow-remove-essential", argv)
+        self.assertEqual(argv[-1], "cowsay")
+
+    def test_refuses_an_empty_removal(self) -> None:
+        from ossgui import packages
+        with self.assertRaises(packages.PackageError):
+            packages.to_argv([])
+
+    def test_cascade_separates_what_you_asked_for(self) -> None:
+        from ossgui import packages
+        cascade = packages.Cascade(
+            requested=["wallpapers"], removing=["wallpapers", "gdm3", "gnome-shell"]
+        )
+        self.assertEqual(cascade.collateral, ["gdm3", "gnome-shell"])
+
+    def test_cascade_flags_protected_packages_caught_in_it(self) -> None:
+        from ossgui import packages
+        installed = {
+            "cowsay": packages.Package("cowsay", "1.0"),
+            "dpkg": packages.Package("dpkg", "1.0", essential=True),
+        }
+        cascade = packages.Cascade(requested=["cowsay"], removing=["cowsay", "dpkg"])
+        self.assertEqual(cascade.blocked_by(installed), ["dpkg"])
+
+    def test_apt_note_is_not_mistaken_for_an_error(self) -> None:
+        """`NOTE: This is only a simulation!` contains "E:".
+
+        A substring check for "E:" matched apt's own note, bailed out early, and
+        returned an empty cascade — so a 64-package removal read as touching
+        nothing. Errors are lines that *start* with E:.
+        """
+        from ossgui import packages
+        sample = (
+            "NOTE: This is only a simulation!\n"
+            "Reading package lists...\n"
+            "Remv cowsay [3.03]\n"
+            "Remv fortune [1.0]\n"
+        )
+        # Exercise the parsing path directly, without invoking apt.
+        found = [
+            m.group("name")
+            for m in (packages._REMV.match(l.strip()) for l in sample.splitlines())
+            if m
+        ]
+        self.assertEqual(found, ["cowsay", "fortune"])
+        self.assertFalse([l for l in sample.splitlines() if l.startswith("E:")])

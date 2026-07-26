@@ -351,6 +351,34 @@ class ReviewDialog(Adw.Window):
                 group.add(self._row(" ".join(change.command), change.why))
             page.add(group)
 
+        if self.window.package_removals:
+            cascade = self.window.package_cascade
+            selected = sorted(self.window.package_removals)
+            group = Adw.PreferencesGroup(
+                title="Package removal",
+                description=(
+                    "The only step here that restoring a file cannot undo, so it "
+                    "runs last."
+                ),
+            )
+            if cascade is not None and cascade.ok:
+                group.add(self._row(
+                    f"{len(cascade.removing)} package(s) removed, "
+                    f"~{cascade.freed_kb / 1024:.0f} MB freed",
+                    f"You selected {len(selected)}: {', '.join(selected)}."
+                    + (f"  apt adds {len(cascade.collateral)}: "
+                       f"{', '.join(cascade.collateral[:12])}"
+                       + ("…" if len(cascade.collateral) > 12 else "")
+                       if cascade.collateral else "  Nothing else depends on them."),
+                ))
+            else:
+                group.add(self._row(
+                    f"{len(selected)} package(s) selected",
+                    "apt has not confirmed the cascade — Apply will re-check and "
+                    "refuse if it sweeps up anything protected.",
+                ))
+            page.add(group)
+
         if self.window.snap_changes:
             revoked = [
                 p for p, a in self.window.snap_changes.items() if a == "disconnect"
@@ -457,11 +485,12 @@ class ApplyProgressDialog(Adw.Window):
         unit_changes = dict(self.window.unit_changes)
         apparmor_changes = dict(self.window.apparmor_changes)
         snap_changes = dict(self.window.snap_changes)
+        package_removals = sorted(self.window.package_removals)
         extras = self.window.extras_payload()
         thread = threading.Thread(
             target=self._worker,
             args=(selection, firewall, unit_changes, apparmor_changes, extras,
-                  snap_changes),
+                  snap_changes, package_removals),
             daemon=True,
         )
         thread.start()
@@ -474,6 +503,7 @@ class ApplyProgressDialog(Adw.Window):
         apparmor_changes: dict,
         extras: dict,
         snap_changes: dict,
+        package_removals: list,
     ) -> None:
         outcome = privileged.apply(
             selection,
@@ -482,6 +512,7 @@ class ApplyProgressDialog(Adw.Window):
             apparmor_changes=apparmor_changes,
             extras=extras,
             snap_changes=snap_changes,
+            package_removals=package_removals,
         )
         user_results = []
         if outcome.ok:

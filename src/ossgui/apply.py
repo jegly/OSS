@@ -31,6 +31,7 @@ from . import fstab as fstab_module
 from . import permissions as permissions_module
 from . import probe, render, ufw as ufw_module, units as units_module
 from . import sandbox as sandbox_module
+from . import packages as packages_module
 from . import snapd as snapd_module
 from . import usb as usb_module
 from .catalogue import Catalogue
@@ -319,6 +320,8 @@ def apply_plan(
     apparmor_changes: dict[str, str] | None = None,
     extras: dict | None = None,
     snap_changes: dict[str, str] | None = None,
+    package_removals: list[str] | None = None,
+    package_purge: bool = False,
 ) -> Result:
     """Run the whole transaction, rolling back on any failure."""
     result = Result()
@@ -379,6 +382,18 @@ def apply_plan(
             apply_fstab(extras["fstab"], result)
         if "usb" in extras:
             apply_usb(extras["usb"], result)
+
+        # Package removal goes last of all: it is the only step that cannot be
+        # rolled back by restoring a file, so everything else should already have
+        # succeeded before we get here.
+        for argv, why in packages_module.plan_commands(
+            package_removals or [], package_purge
+        ):
+            code, output = run(argv)
+            ok = code == 0
+            result.steps.append(Step("command", " ".join(argv), ok, output[-2000:]))
+            if not ok:
+                raise ApplyError(f"{why} failed: {output[-400:]}")
 
         # Snap interfaces: snapd applies these immediately, no reload needed.
         for argv, why in snapd_module.plan_commands(snap_changes or {}):
@@ -845,6 +860,16 @@ def run_payload(catalogue: Catalogue, payload: dict) -> Result:
             return Result(ok=False, error=f"bad bootloader payload: {exc}")
         extras["bootloader"] = payload["bootloader"]
 
+    package_removals: list[str] = []
+    package_purge = False
+    if "packages" in payload:
+        try:
+            package_removals, package_purge = packages_module.from_payload(
+                payload["packages"]
+            )
+        except packages_module.PackageError as exc:
+            return Result(ok=False, error=f"refusing this removal: {exc}")
+
     snap_changes: dict[str, str] = {}
     if "snap" in payload:
         try:
@@ -872,11 +897,12 @@ def run_payload(catalogue: Catalogue, payload: dict) -> Result:
         and not unit_changes
         and not apparmor_changes
         and not snap_changes
+        and not package_removals
         and not extras
     ):
         return Result(ok=True, error="", steps=[Step("write", "nothing to do", True)])
 
     return apply_plan(
         catalogue, plan, selection, wanted_firewall, unit_changes, apparmor_changes,
-        extras, snap_changes,
+        extras, snap_changes, package_removals, package_purge,
     )

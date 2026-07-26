@@ -44,6 +44,7 @@ ALLOWED_COMMANDS = frozenset(
         "/usr/sbin/apparmor_parser",
         "/usr/sbin/aa-status",
         "/usr/bin/snap",
+        "/usr/bin/apt-get",
     }
 )
 

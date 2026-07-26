@@ -1,0 +1,18 @@
+#  Installed packages — removal only.
+#
+#  Not in the original BUILD_PLAN. Fewer installed packages is less attack
+#  surface, but the risk is entirely in what comes with a removal: on this
+#  machine `ubuntu-wallpapers` takes gdm3 and gnome-shell with it.
+#
+#  So there are no flags here. Every selection is put through apt's own resolver
+#  with `apt-get --simulate`, and the real list is shown before Apply is offered.
+#  There is deliberately no install path: a hardening tool that installs software
+#  is a hardening tool with a supply chain.
+
+[section]
+id       = "packages"
+title    = "packages"
+nav      = "System"
+order    = 79
+syntax   = "special"
+desc     = "Installed packages, with what each one is for, and removal that shows the full dependency cascade first. Essential and Priority: required packages are never offered — losing those does not break a feature, it breaks the system."

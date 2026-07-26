@@ -87,6 +87,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.usb_change: dict = {}
         #: "snap:plug" -> connect|disconnect.
         self.snap_changes: dict[str, str] = {}
+        #: Package names selected for removal, and apt's answer about them.
+        self.package_removals: set[str] = set()
+        self.package_cascade = None
 
         self.states = probe.all_states(catalogue, facts, staging.selection)
         self.unaffected = probe.unaffected_mitigations(catalogue, facts)
@@ -412,6 +415,12 @@ class MainWindow(Adw.ApplicationWindow):
                 self.grid_box.append(page(self))
                 self._refresh_chrome()
                 return
+            if section_id == "packages":
+                from .packages_page import PackagesPage
+
+                self.grid_box.append(PackagesPage(self))
+                self._refresh_chrome()
+                return
             if section_id == "snap":
                 from .snap_page import SnapPage
 
@@ -677,6 +686,7 @@ class MainWindow(Adw.ApplicationWindow):
             + len(self.fstab_changes)
             + len(self.usb_change)
             + len(self.snap_changes)
+            + len(self.package_removals)
             + (1 if self.bootloader_change else 0)
         )
         if count:

@@ -67,6 +67,7 @@ def build_payload(
     apparmor_changes: dict[str, str] | None = None,
     extras: dict | None = None,
     snap_changes: dict[str, str] | None = None,
+    package_removals: list[str] | None = None,
 ) -> dict:
     payload: dict = {"version": 1, "selection": dict(selection)}
     if sections is not None:
@@ -79,6 +80,8 @@ def build_payload(
         payload["apparmor"] = dict(apparmor_changes)
     if snap_changes:
         payload["snap"] = dict(snap_changes)
+    if package_removals:
+        payload["packages"] = {"remove": sorted(package_removals)}
     for key, value in (extras or {}).items():
         if value:
             payload[key] = value
@@ -132,12 +135,13 @@ def apply(
     apparmor_changes: dict[str, str] | None = None,
     extras: dict | None = None,
     snap_changes: dict[str, str] | None = None,
+    package_removals: list[str] | None = None,
 ) -> ApplyOutcome:
     """Hand the selection to the helper through pkexec and parse the result."""
     return _invoke(
         build_payload(
             selection, sections, firewall, unit_changes, apparmor_changes, extras,
-            snap_changes,
+            snap_changes, package_removals,
         )
     )
 
