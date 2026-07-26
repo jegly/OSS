@@ -193,6 +193,76 @@ def package_present(package: str) -> bool:
     )
 
 
+#: Drop-in directories that only work because another file includes them.
+#: Writing into one of these when the include line is missing produces a file
+#: that is silently ignored — which is the failure mode this whole app exists to
+#: catch, so it is worth checking rather than assuming.
+#:
+#:   directory -> (file that must include it, marker, what to add)
+INCLUDE_MECHANISMS = {
+    "/etc/sudoers.d": (
+        "/etc/sudoers",
+        ("@includedir /etc/sudoers.d", "#includedir /etc/sudoers.d"),
+        "@includedir /etc/sudoers.d",
+    ),
+    "/etc/ssh/sshd_config.d": (
+        "/etc/ssh/sshd_config",
+        ("Include /etc/ssh/sshd_config.d/*.conf",),
+        "Include /etc/ssh/sshd_config.d/*.conf",
+    ),
+    "/etc/default/grub.d": (
+        "/usr/sbin/grub-mkconfig",
+        ("grub.d",),
+        "(shipped by grub-common; nothing to add)",
+    ),
+}
+
+
+def include_check(directory: str) -> tuple[str, str]:
+    """``(status, detail)`` for a drop-in directory's include mechanism.
+
+    Status is ``ok``, ``missing``, or ``unreadable`` — the last because
+    ``/etc/sudoers`` is mode 0440, so an unprivileged check genuinely cannot
+    tell, and saying "missing" there would be a false alarm.
+    """
+    entry = INCLUDE_MECHANISMS.get(directory)
+    if entry is None:
+        return "ok", ""
+    source, markers, remedy = entry
+
+    path = Path(source)
+    if not path.exists():
+        return "missing", f"{source} does not exist"
+    content = _read_text(path)
+    if content is None:
+        return "unreadable", (
+            f"{source} is not readable without root, so this cannot be confirmed "
+            f"here — the helper re-checks it before writing."
+        )
+    if any(marker in content for marker in markers):
+        return "ok", ""
+    return "missing", (
+        f"{source} does not include {directory}, so a file written there would be "
+        f"ignored. Add:  {remedy}"
+    )
+
+
+def broken_includes(catalogue: Catalogue) -> list[tuple[str, str]]:
+    """``(section id, detail)`` for sections whose drop-in dir is not included."""
+    out = []
+    for section in catalogue.sections:
+        for target in section.targets():
+            directory = str(Path(target).parent)
+            if directory not in INCLUDE_MECHANISMS:
+                continue
+            if section.requires_pkg and not package_present(section.requires_pkg):
+                continue
+            status, detail = include_check(directory)
+            if status == "missing":
+                out.append((section.id, detail))
+    return out
+
+
 def read_target_files(catalogue: Catalogue) -> dict[str, str]:
     """Current content of every catalogue target file that exists and is readable."""
     out: dict[str, str] = {}

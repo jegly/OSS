@@ -210,3 +210,80 @@ class TestOptionalPackages(SandboxCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestIncludeMechanisms(SandboxCase):
+    """A drop-in directory nothing includes is a file that is silently ignored.
+
+    That is the exact failure this app exists to catch, so it must not be a
+    failure the app itself can commit.
+    """
+
+    def test_unreadable_source_is_not_reported_as_broken(self) -> None:
+        """/etc/sudoers is mode 0440, so an unprivileged check cannot tell."""
+        status, detail = probe.include_check("/etc/sudoers.d")
+        self.assertIn(status, ("ok", "unreadable"))
+        if status == "unreadable":
+            self.assertIn("root", detail)
+
+    def test_a_directory_with_no_mechanism_is_fine(self) -> None:
+        self.assertEqual(probe.include_check("/etc/sysctl.d"), ("ok", ""))
+
+    def test_missing_include_is_detected(self) -> None:
+        source, _markers, _remedy = probe.INCLUDE_MECHANISMS["/etc/sudoers.d"]
+        original = probe.INCLUDE_MECHANISMS["/etc/sudoers.d"]
+
+        # Point the check at a file we control that lacks the include line.
+        decoy = self.sandboxed("/etc/sudoers-without-includedir")
+        decoy.parent.mkdir(parents=True, exist_ok=True)
+        decoy.write_text("Defaults env_reset\n")
+        probe.INCLUDE_MECHANISMS["/etc/sudoers.d"] = (
+            str(decoy), ("@includedir /etc/sudoers.d",), "@includedir /etc/sudoers.d",
+        )
+        self.addCleanup(
+            probe.INCLUDE_MECHANISMS.__setitem__, "/etc/sudoers.d", original
+        )
+
+        status, detail = probe.include_check("/etc/sudoers.d")
+        self.assertEqual(status, "missing")
+        self.assertIn("would be ignored", f"a file written there {detail}")
+
+    def test_apply_refuses_to_write_into_an_unincluded_dropin(self) -> None:
+        original = probe.INCLUDE_MECHANISMS.get("/etc/sysctl.d")
+        decoy = self.sandboxed("/etc/decoy-source")
+        decoy.parent.mkdir(parents=True, exist_ok=True)
+        decoy.write_text("nothing useful here\n")
+        probe.INCLUDE_MECHANISMS["/etc/sysctl.d"] = (
+            str(decoy), ("some-marker-that-is-absent",), "add the include line",
+        )
+        self.addCleanup(probe.INCLUDE_MECHANISMS.pop, "/etc/sysctl.d", None)
+        if original is not None:
+            self.addCleanup(
+                probe.INCLUDE_MECHANISMS.__setitem__, "/etc/sysctl.d", original
+            )
+
+        plan = render.Plan(
+            writes=[
+                render.FileWrite(
+                    path="/etc/sysctl.d/99-oss.conf",
+                    content="kernel.kptr_restrict = 2\n",
+                    section="sysctl",
+                )
+            ]
+        )
+        result = apply.apply_plan(self.catalogue, plan, {"kptr_restrict": "2"})
+        self.assertFalse(result.ok)
+        self.assertIn("would be ignored", result.error)
+        self.assertFalse(self.sandboxed("/etc/sysctl.d/99-oss.conf").exists())
+
+
+class TestDirectoryMode(SandboxCase):
+    def test_created_directories_are_not_world_writable(self) -> None:
+        """The mode is set explicitly rather than left to an inherited umask."""
+        old_umask = os.umask(0)
+        self.addCleanup(os.umask, old_umask)
+
+        target = self.sandboxed("/etc/security/pwquality.conf.d/99-oss.conf")
+        apply.write_atomic(target, "minlen = 14\n", 0o644)
+        mode = target.parent.stat().st_mode & 0o777
+        self.assertEqual(mode, 0o755, f"directory created {mode:04o}")

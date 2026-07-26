@@ -167,7 +167,12 @@ def backup(path: Path) -> Path | None:
 def write_atomic(path: Path, content: str, mode: int) -> None:
     """Write via a temp file in the same directory, then rename over the target."""
     _refuse_symlink(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.parent.is_dir():
+        # Explicit mode rather than whatever umask pkexec handed us: a config
+        # directory created 0777 because of an odd inherited umask would be a
+        # hole opened by the tool that is supposed to close them.
+        path.parent.mkdir(parents=True, exist_ok=True)
+        os.chmod(path.parent, 0o755)
     handle, temp_name = tempfile.mkstemp(dir=path.parent, prefix=".oss-")
     temp = Path(temp_name)
     try:
@@ -326,6 +331,14 @@ def apply_plan(
     try:
         # 1. Validate every candidate before anything is written.
         for write in plan.writes:
+            # A drop-in whose directory nothing includes is a file that gets
+            # silently ignored. Better to fail loudly than to report success.
+            directory = str(Path(write.path).parent)
+            status, detail = probe.include_check(directory)
+            if status == "missing":
+                raise ApplyError(
+                    f"{write.path} would be ignored: {detail}"
+                )
             validate_write(write, result)
 
         # 2. Back up, then write.

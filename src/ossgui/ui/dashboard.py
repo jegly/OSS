@@ -130,6 +130,13 @@ class Dashboard(Gtk.Box):
         if dot:
             out.append(("high", "DNS over TLS would break", dot))
 
+        for section_id, detail in probe.broken_includes(self.window.catalogue):
+            out.append((
+                "high",
+                f"{section_id}: its drop-in directory is not included",
+                detail,
+            ))
+
         loaded_but_blacklisted = [
             flag_id
             for flag_id, state in self.window.states.items()

@@ -236,7 +236,10 @@ class ReviewDialog(Adw.Window):
 
     def _cross_checks(self) -> list[str]:
         selection = self.window.staging.selection
-        messages = []
+        messages = [
+            f"{section_id}: {detail}"
+            for section_id, detail in probe.broken_includes(self.window.catalogue)
+        ]
         for check in (
             probe.kdump_conflict(self.window.facts, selection),
             probe.slab_debug_redundancy(selection),
