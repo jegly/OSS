@@ -66,6 +66,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.firewall = ufw_module.read_unprivileged()
         self.firewall_baseline = self.firewall.copy()
         self.firewall_dirty = False
+        #: unit name -> mask|disable|enable|unmask, for units outside the catalogue.
+        self.unit_changes: dict[str, str] = {}
 
         self.states = probe.all_states(catalogue, facts, staging.selection)
         self.unaffected = probe.unaffected_mitigations(catalogue, facts)
@@ -376,6 +378,12 @@ class MainWindow(Adw.ApplicationWindow):
                 self.grid_box.append(FirewallPage(self))
                 self._refresh_chrome()
                 return
+            if section_id == "services":
+                from .services import ServicesPage
+
+                # The browser sits above the curated grid: the grid is what
+                # presets can carry, the browser reaches everything else.
+                self.grid_box.append(ServicesPage(self))
             if not section.implemented:
                 self._show_pending(section)
                 return
@@ -589,7 +597,11 @@ class MainWindow(Adw.ApplicationWindow):
             return []
 
     def _refresh_chrome(self) -> None:
-        count = self.staging.changed_count + len(self.firewall_changes())
+        count = (
+            self.staging.changed_count
+            + len(self.firewall_changes())
+            + len(self.unit_changes)
+        )
         if count:
             self.counter.set_label(f"{count} changed")
             self.counter.add_css_class("changed-counter")
@@ -669,6 +681,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_discard(self, _button: Gtk.Button) -> None:
         self.firewall = self.firewall_baseline.copy()
         self.firewall_dirty = False
+        self.unit_changes.clear()
         self.staging.reset_to_baseline()
         self._show_section(self.current_section)
 
@@ -701,6 +714,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.firewall = refreshed
         self.firewall_baseline = refreshed.copy()
         self.firewall_dirty = False
+        self.unit_changes.clear()
         self._show_section(self.current_section)
 
     def toast(self, message: str, timeout: int = 4) -> None:

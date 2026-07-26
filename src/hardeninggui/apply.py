@@ -25,7 +25,7 @@ import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from . import probe, render, ufw as ufw_module
+from . import probe, render, ufw as ufw_module, units as units_module
 from .catalogue import Catalogue
 from .render import ALLOWED_COMMANDS, Plan
 
@@ -296,6 +296,7 @@ def apply_plan(
     plan: Plan,
     selection: dict[str, str],
     firewall: "ufw_module.State | None" = None,
+    unit_changes: dict[str, str] | None = None,
 ) -> Result:
     """Run the whole transaction, rolling back on any failure."""
     result = Result()
@@ -337,7 +338,15 @@ def apply_plan(
             if not ok:
                 raise ApplyError(f"{command} failed with exit {code}: {output}")
 
-        # 4. The firewall, last: its rules are the thing most likely to cut the
+        # 4. Arbitrary unit changes, which the flag catalogue cannot express.
+        for argv, why in units_module.plan_commands(unit_changes or {}):
+            code, output = run(argv)
+            ok = code == 0
+            result.steps.append(Step("command", " ".join(argv), ok, output))
+            if not ok:
+                raise ApplyError(f"{why} failed: {output}")
+
+        # 5. The firewall, last: its rules are the thing most likely to cut the
         #    connection this session is running over.
         if firewall is not None:
             apply_firewall(firewall, result)
@@ -468,6 +477,13 @@ def run_payload(catalogue: Catalogue, payload: dict) -> Result:
         except ufw_module.UfwError as exc:
             return Result(ok=False, error=f"bad firewall payload: {exc}")
 
+    unit_changes: dict[str, str] = {}
+    if "units" in payload:
+        try:
+            unit_changes = units_module.from_payload(payload["units"])
+        except units_module.UnitError as exc:
+            return Result(ok=False, error=f"bad units payload: {exc}")
+
     sections = payload.get("sections")
     current = probe.read_target_files(catalogue)
     try:
@@ -475,7 +491,7 @@ def run_payload(catalogue: Catalogue, payload: dict) -> Result:
     except render.RenderError as exc:
         return Result(ok=False, error=f"could not build the plan: {exc}")
 
-    if plan.is_empty and wanted_firewall is None:
+    if plan.is_empty and wanted_firewall is None and not unit_changes:
         return Result(ok=True, error="", steps=[Step("write", "nothing to do", True)])
 
-    return apply_plan(catalogue, plan, selection, wanted_firewall)
+    return apply_plan(catalogue, plan, selection, wanted_firewall, unit_changes)

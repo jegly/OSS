@@ -59,12 +59,15 @@ def build_payload(
     selection: dict[str, str],
     sections: list[str] | None = None,
     firewall: dict | None = None,
+    unit_changes: dict[str, str] | None = None,
 ) -> dict:
     payload: dict = {"version": 1, "selection": dict(selection)}
     if sections is not None:
         payload["sections"] = list(sections)
     if firewall is not None:
         payload["ufw"] = firewall
+    if unit_changes:
+        payload["units"] = dict(unit_changes)
     return payload
 
 
@@ -82,9 +85,10 @@ def apply(
     selection: dict[str, str],
     sections: list[str] | None = None,
     firewall: dict | None = None,
+    unit_changes: dict[str, str] | None = None,
 ) -> ApplyOutcome:
     """Hand the selection to the helper through pkexec and parse the result."""
-    return _invoke(build_payload(selection, sections, firewall))
+    return _invoke(build_payload(selection, sections, firewall, unit_changes))
 
 
 def _invoke(payload: dict) -> ApplyOutcome:

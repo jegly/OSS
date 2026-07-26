@@ -18,7 +18,8 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
-from .. import privileged, probe, render, ufw as ufw_module  # noqa: E402
+from .. import privileged, probe, render  # noqa: E402
+from .. import ufw as ufw_module, units as units_module  # noqa: E402
 from .style import mark_solid  # noqa: E402
 
 
@@ -141,6 +142,17 @@ class ReviewDialog(Adw.Window):
                 "; ".join(str(c) for c in self.plan.commands) or "none",
             )
         )
+
+        if self.window.unit_changes:
+            masked = [n for n, a in self.window.unit_changes.items() if a == "mask"]
+            counts.add(
+                self._row(
+                    f"{len(self.window.unit_changes)} unit change(s)",
+                    (f"{len(masked)} masked. " if masked else "")
+                    + "A masked unit cannot be started at all, including as a "
+                    "dependency of something else that needs it.",
+                )
+            )
 
         firewall = self.window.firewall_changes()
         if firewall:
@@ -287,6 +299,15 @@ class ReviewDialog(Adw.Window):
             root.add(self._row("none", ""))
         page.add(root)
 
+        if self.window.unit_changes:
+            group = Adw.PreferencesGroup(
+                title="Units",
+                description="Masking symlinks the unit to /dev/null so nothing can start it.",
+            )
+            for argv, why in units_module.plan_commands(self.window.unit_changes):
+                group.add(self._row(" ".join(argv), why))
+            page.add(group)
+
         firewall = self.window.firewall_changes()
         if firewall:
             group = Adw.PreferencesGroup(
@@ -361,13 +382,18 @@ class ApplyProgressDialog(Adw.Window):
             if self.window.firewall_dirty
             else None
         )
+        unit_changes = dict(self.window.unit_changes)
         thread = threading.Thread(
-            target=self._worker, args=(selection, firewall), daemon=True
+            target=self._worker, args=(selection, firewall, unit_changes), daemon=True
         )
         thread.start()
 
-    def _worker(self, selection: dict[str, str], firewall: dict | None) -> None:
-        outcome = privileged.apply(selection, firewall=firewall)
+    def _worker(
+        self, selection: dict[str, str], firewall: dict | None, unit_changes: dict
+    ) -> None:
+        outcome = privileged.apply(
+            selection, firewall=firewall, unit_changes=unit_changes
+        )
         user_results = []
         if outcome.ok:
             plan = build_plan(self.window)
