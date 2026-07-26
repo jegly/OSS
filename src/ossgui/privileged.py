@@ -141,7 +141,15 @@ def _invoke(payload: dict) -> ApplyOutcome:
     """Write the payload somewhere private and run the helper under pkexec."""
     helper = paths.helper_path()
     if not Path(helper).exists():
-        return ApplyOutcome(False, error=f"helper not installed at {helper}")
+        return ApplyOutcome(
+            False,
+            error=(
+                f"The privileged helper is not installed at {helper}, so nothing "
+                f"can be applied. This is expected when running from a source "
+                f"checkout — the helper ships in the package. Install it with:\n\n"
+                f"    sudo dpkg -i build/oss_0.1.0_all.deb"
+            ),
+        )
     if shutil.which("pkexec") is None:
         return ApplyOutcome(False, error="pkexec is not available on this system")
 

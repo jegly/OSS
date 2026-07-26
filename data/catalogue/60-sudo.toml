@@ -24,6 +24,7 @@ risk    = "safe"
 
 [[flag]]
 id      = "sudo_logfile"
+needs   = ["gnu-sudo"]
 group   = "sudo / logging"
 key     = "logfile"
 value   = "\"/var/log/sudo.log\""
@@ -35,6 +36,7 @@ risk    = "safe"
 
 [[flag]]
 id      = "sudo_log_input"
+needs   = ["gnu-sudo"]
 group   = "sudo / logging"
 key     = "log_input"
 value   = ""
@@ -47,6 +49,7 @@ breaks  = "Logs grow quickly; records secrets typed at nested prompts"
 
 [[flag]]
 id      = "sudo_log_output"
+needs   = ["gnu-sudo"]
 group   = "sudo / logging"
 key     = "log_output"
 value   = ""
@@ -103,6 +106,7 @@ risk    = "safe"
 
 [[flag]]
 id      = "sudo_requiretty"
+needs   = ["gnu-sudo"]
 group   = "sudo / session"
 key     = "requiretty"
 value   = ""

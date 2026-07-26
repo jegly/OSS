@@ -596,6 +596,9 @@ class MainWindow(Adw.ApplicationWindow):
         state = self.states.get(flag.id)
         if state is not None and state.state is State.INVALID:
             return state.note
+        for token in flag.needs:
+            if not probe.has_capability(token):
+                return probe.capability_reason(token)
         if flag.id in self.unaffected:
             return (
                 "This CPU reports 'Not affected' for the vulnerability this "

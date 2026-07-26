@@ -294,6 +294,27 @@ def findings(chain: Chain) -> list[tuple[str, str, str]]:
     return out
 
 
+def overridden_by_legacy(chain: Chain, keys: list[str]) -> dict[str, str]:
+    """Keys we would write that /etc/sysctl.conf sets afterwards, and to what.
+
+    `sysctl --system` reads /etc/sysctl.conf *last* — after every directory,
+    including /etc/sysctl.d where we write. So a key present in both is written by
+    us and then immediately overridden, and our change silently does not take.
+
+    It is worse than merely not working: systemd-sysctl at boot does not read
+    /etc/sysctl.conf at all, so the same setting fails on Apply and then works
+    after a reboot, which is a baffling thing to debug.
+    """
+    out: dict[str, str] = {}
+    for key in keys:
+        result = chain.keys.get(key)
+        if result is None:
+            continue
+        if str(result.winner.source) == LEGACY_FILE:
+            out[key] = result.value
+    return out
+
+
 def migration_selection(chain: Chain, catalogue) -> dict[str, str]:
     """Vendor-layer keys that map onto a catalogue flag, ready to re-apply from /etc.
 

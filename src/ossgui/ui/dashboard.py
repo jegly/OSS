@@ -130,6 +130,21 @@ class Dashboard(Gtk.Box):
         if dot:
             out.append(("high", "DNS over TLS would break", dot))
 
+        managed = [
+            f.key for f in self.window.catalogue.flags.values() if f.section == "sysctl"
+        ]
+        shadowed = sysctl_chain.overridden_by_legacy(self.chain, managed)
+        if shadowed:
+            out.append((
+                "high",
+                f"/etc/sysctl.conf overrides {len(shadowed)} setting(s) this app manages",
+                f"`sysctl --system` applies /etc/sysctl.conf after /etc/sysctl.d, so "
+                f"anything set in both is written by this app and then undone: "
+                + ", ".join(sorted(shadowed)[:8])
+                + ". Moving those keys out of /etc/sysctl.conf and into "
+                "/etc/sysctl.d lets them be managed here.",
+            ))
+
         for section_id, detail in probe.broken_includes(self.window.catalogue):
             out.append((
                 "high",

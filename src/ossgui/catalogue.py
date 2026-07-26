@@ -108,6 +108,9 @@ class Flag:
     editable: bool = False
     #: Anchored regex every editable value must match. Required when ``editable``.
     pattern: str = ""
+    #: Capability tokens this flag needs — see probe.has_capability. Used where a
+    #: directive exists in one implementation of a tool but not another.
+    needs: tuple[str, ...] = ()
 
     @property
     def is_choice(self) -> bool:
@@ -316,6 +319,7 @@ def _parse_flag(raw: dict, section: Section, path: Path) -> Flag:
         in_place=in_place,
         editable=editable,
         pattern=pattern,
+        needs=tuple(str(v) for v in raw.get("needs", ())),
     )
 
 

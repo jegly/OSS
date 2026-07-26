@@ -39,6 +39,10 @@ def _skip(flag, catalogue, allow_one_way: bool) -> bool:
         return True
     if flag.is_one_way_at(flag.value) and not allow_one_way:
         return True
+    # A directive this system's tool does not implement cannot go in a shipped
+    # preset: it would fail validation on machines that lack it.
+    if not all(probe.has_capability(token) for token in flag.needs):
+        return True
     return False
 
 

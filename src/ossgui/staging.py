@@ -64,6 +64,12 @@ class Staging:
 
     # -- queries ----------------------------------------------------------- #
 
+    def can_apply(self, flag: Flag) -> bool:
+        """Whether this system has what the flag needs (see probe.has_capability)."""
+        from . import probe as probe_module
+
+        return all(probe_module.has_capability(token) for token in flag.needs)
+
     def is_set(self, flag_id: str) -> bool:
         return flag_id in self.selection
 
@@ -125,6 +131,11 @@ class Staging:
         section = self.catalogue.section(flag.section)
         if not section.implemented:
             return
+        if value is not None and not self.can_apply(flag):
+            # Staging a directive this system's tool does not implement would fail
+            # the whole transaction at validation time, on a flag the user had no
+            # way of knowing was unavailable.
+            return
         if value is None:
             self.selection.pop(flag_id, None)
         else:
@@ -148,7 +159,7 @@ class Staging:
             if flag is None:
                 continue
             section = self.catalogue.section(flag.section)
-            if not section.implemented:
+            if not section.implemented or not self.can_apply(flag):
                 continue
             if value is None:
                 self.selection.pop(flag_id, None)
@@ -165,7 +176,7 @@ class Staging:
             if flag.group != group:
                 continue
             # Never mass-enable something irreversible: those stay deliberate.
-            if on and flag.is_one_way_at(flag.value):
+            if on and (flag.is_one_way_at(flag.value) or not self.can_apply(flag)):
                 continue
             self.selection[flag.id] = flag.value if on else None
             if not on:

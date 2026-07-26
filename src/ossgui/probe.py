@@ -16,6 +16,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
+from functools import lru_cache
 from enum import Enum
 from pathlib import Path
 
@@ -192,6 +193,43 @@ def package_present(package: str) -> bool:
         os.path.exists(f"{prefix}/{binary}")
         for prefix in ("/usr/sbin", "/usr/bin", "/sbin", "/bin")
     )
+
+
+@lru_cache(maxsize=1)
+def sudo_implementation() -> str:
+    """Which sudo this system has: ``sudo-rs``, ``gnu`` or ``unknown``.
+
+    Ubuntu 26.04 ships sudo-rs, a Rust reimplementation that supports a subset of
+    sudoers. Four directives GNU sudo has — logfile, log_input, log_output and
+    requiretty — are rejected by it, so staging them would fail the whole
+    transaction at visudo time on a directive the user could not know was absent.
+    """
+    raw = _run(["sudo", "--version"]) or ""
+    lowered = raw.lower()
+    if "sudo-rs" in lowered:
+        return "sudo-rs"
+    if "sudo version" in lowered:
+        return "gnu"
+    return "unknown"
+
+
+#: Capability tokens a flag can declare a dependency on, and how to test each.
+def has_capability(token: str) -> bool:
+    if token == "gnu-sudo":
+        # "unknown" is treated as available: better to let visudo have the final
+        # say than to hide a flag because a version string could not be parsed.
+        return sudo_implementation() != "sudo-rs"
+    return True
+
+
+def capability_reason(token: str) -> str:
+    if token == "gnu-sudo":
+        return (
+            "This directive only exists in GNU sudo. Ubuntu 26.04 ships sudo-rs, "
+            "which does not implement it — visudo rejects it, so it cannot be "
+            "applied here."
+        )
+    return f"Requires {token}, which is not available on this system."
 
 
 #: Drop-in directories that only work because another file includes them.

@@ -18,7 +18,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
-from .. import privileged, probe, render  # noqa: E402
+from .. import privileged, probe, render, sysctl_chain  # noqa: E402
 from .. import apparmor as apparmor_module  # noqa: E402
 from .. import ufw as ufw_module, units as units_module  # noqa: E402
 from .style import mark_solid  # noqa: E402
@@ -240,6 +240,26 @@ class ReviewDialog(Adw.Window):
             f"{section_id}: {detail}"
             for section_id, detail in probe.broken_includes(self.window.catalogue)
         ]
+        sysctl_keys = [
+            self.window.catalogue.flags[i].key
+            for i in selection
+            if i in self.window.catalogue.flags
+            and self.window.catalogue.flags[i].section == "sysctl"
+        ]
+        if sysctl_keys:
+            chain = sysctl_chain.read()
+            shadowed = sysctl_chain.overridden_by_legacy(chain, sysctl_keys)
+            if shadowed:
+                listed = ", ".join(f"{k}={v}" for k, v in list(shadowed.items())[:6])
+                messages.append(
+                    f"{len(shadowed)} setting(s) would be overridden by "
+                    f"/etc/sysctl.conf, which `sysctl --system` applies after "
+                    f"/etc/sysctl.d: {listed}. They would be written and then "
+                    f"immediately undone — and would then start working after a "
+                    f"reboot, because systemd-sysctl does not read that file. "
+                    f"Remove them from /etc/sysctl.conf first."
+                )
+
         for check in (
             probe.kdump_conflict(self.window.facts, selection),
             probe.slab_debug_redundancy(selection),

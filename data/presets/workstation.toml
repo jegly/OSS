@@ -118,6 +118,10 @@ id = "ctrl_alt_del"
 value = "0"
 
 [[set]]
+id = "default_qdisc"
+value = "fq_codel"
+
+[[set]]
 id = "disable_lock_screen"
 value = "false"
 
@@ -206,6 +210,10 @@ id = "init_on_alloc"
 value = "1"
 
 [[set]]
+id = "inotify_max_user_watches"
+value = "65536"
+
+[[set]]
 id = "intel_iommu"
 value = "on"
 
@@ -226,7 +234,15 @@ id = "ipv6_accept_redirects"
 value = "0"
 
 [[set]]
+id = "ipv6_accept_redirects_default"
+value = "0"
+
+[[set]]
 id = "ipv6_accept_source_route"
+value = "-1"
+
+[[set]]
+id = "ipv6_accept_source_route_default"
 value = "-1"
 
 [[set]]
@@ -243,6 +259,10 @@ value = "7200"
 
 [[set]]
 id = "ipv6_use_tempaddr"
+value = "2"
+
+[[set]]
+id = "ipv6_use_tempaddr_default"
 value = "2"
 
 [[set]]
@@ -366,11 +386,23 @@ id = "mod_af_802154"
 value = "1"
 
 [[set]]
+id = "mod_amd76x_edac"
+value = "1"
+
+[[set]]
 id = "mod_appletalk"
 value = "1"
 
 [[set]]
+id = "mod_asus_acpi"
+value = "1"
+
+[[set]]
 id = "mod_ath3k"
+value = "1"
+
+[[set]]
+id = "mod_ath5k"
 value = "1"
 
 [[set]]
@@ -382,7 +414,27 @@ id = "mod_ax25"
 value = "1"
 
 [[set]]
+id = "mod_b43"
+value = "1"
+
+[[set]]
+id = "mod_bcm43xx"
+value = "1"
+
+[[set]]
+id = "mod_bmc1500"
+value = "1"
+
+[[set]]
 id = "mod_bnep"
+value = "1"
+
+[[set]]
+id = "mod_bootp"
+value = "1"
+
+[[set]]
+id = "mod_brcmsmac"
 value = "1"
 
 [[set]]
@@ -402,6 +454,10 @@ id = "mod_can"
 value = "1"
 
 [[set]]
+id = "mod_cdc_mbim"
+value = "1"
+
+[[set]]
 id = "mod_cdrom"
 value = "1"
 
@@ -410,7 +466,15 @@ id = "mod_cramfs"
 value = "1"
 
 [[set]]
+id = "mod_dal"
+value = "1"
+
+[[set]]
 id = "mod_dccp"
+value = "1"
+
+[[set]]
+id = "mod_de4x5"
 value = "1"
 
 [[set]]
@@ -423,6 +487,18 @@ value = "1"
 
 [[set]]
 id = "mod_econet"
+value = "1"
+
+[[set]]
+id = "mod_eepro100"
+value = "1"
+
+[[set]]
+id = "mod_eth1394"
+value = "1"
+
+[[set]]
+id = "mod_evbug"
 value = "1"
 
 [[set]]
@@ -446,11 +522,19 @@ id = "mod_freevxfs"
 value = "1"
 
 [[set]]
+id = "mod_garmin_gps"
+value = "1"
+
+[[set]]
 id = "mod_gfs2"
 value = "1"
 
 [[set]]
 id = "mod_gspca_main"
+value = "1"
+
+[[set]]
+id = "mod_hci"
 value = "1"
 
 [[set]]
@@ -463,6 +547,18 @@ value = "1"
 
 [[set]]
 id = "mod_iTCO_wdt"
+value = "1"
+
+[[set]]
+id = "mod_icls"
+value = "1"
+
+[[set]]
+id = "mod_intel_csme"
+value = "1"
+
+[[set]]
+id = "mod_intel_me"
 value = "1"
 
 [[set]]
@@ -482,11 +578,31 @@ id = "mod_intel_vsec"
 value = "1"
 
 [[set]]
+id = "mod_ipmi"
+value = "1"
+
+[[set]]
+id = "mod_ipmi_bmc"
+value = "1"
+
+[[set]]
 id = "mod_ipmi_devintf"
 value = "1"
 
 [[set]]
+id = "mod_ipmi_ipmb"
+value = "1"
+
+[[set]]
+id = "mod_ipmi_kcs"
+value = "1"
+
+[[set]]
 id = "mod_ipmi_msghandler"
+value = "1"
+
+[[set]]
+id = "mod_ipmi_rmcp"
 value = "1"
 
 [[set]]
@@ -506,6 +622,10 @@ id = "mod_ipx"
 value = "1"
 
 [[set]]
+id = "mod_iscsi_tcp"
+value = "1"
+
+[[set]]
 id = "mod_jffs2"
 value = "1"
 
@@ -519,6 +639,14 @@ value = "1"
 
 [[set]]
 id = "mod_llc"
+value = "1"
+
+[[set]]
+id = "mod_lms"
+value = "1"
+
+[[set]]
+id = "mod_lp"
 value = "1"
 
 [[set]]
@@ -562,6 +690,10 @@ id = "mod_microread"
 value = "1"
 
 [[set]]
+id = "mod_microread_mei"
+value = "1"
+
+[[set]]
 id = "mod_msdos"
 value = "1"
 
@@ -582,11 +714,19 @@ id = "mod_nfc_digital"
 value = "1"
 
 [[set]]
+id = "mod_nfc_hci"
+value = "1"
+
+[[set]]
 id = "mod_ntfs"
 value = "1"
 
 [[set]]
 id = "mod_ohci1394"
+value = "1"
+
+[[set]]
+id = "mod_p80211"
 value = "1"
 
 [[set]]
@@ -598,7 +738,19 @@ id = "mod_p8023"
 value = "1"
 
 [[set]]
+id = "mod_parport"
+value = "1"
+
+[[set]]
+id = "mod_parport_pc"
+value = "1"
+
+[[set]]
 id = "mod_pcmcia"
+value = "1"
+
+[[set]]
+id = "mod_pcspkr"
 value = "1"
 
 [[set]]
@@ -618,11 +770,39 @@ id = "mod_pn533"
 value = "1"
 
 [[set]]
+id = "mod_pn533_usb"
+value = "1"
+
+[[set]]
 id = "mod_pn544"
 value = "1"
 
 [[set]]
+id = "mod_pn544_mei"
+value = "1"
+
+[[set]]
+id = "mod_ppdev"
+value = "1"
+
+[[set]]
+id = "mod_ppp_generic"
+value = "1"
+
+[[set]]
+id = "mod_prism54"
+value = "1"
+
+[[set]]
 id = "mod_psnap"
+value = "1"
+
+[[set]]
+id = "mod_qmi_wwan"
+value = "1"
+
+[[set]]
+id = "mod_qrtr"
 value = "1"
 
 [[set]]
@@ -650,6 +830,10 @@ id = "mod_rtl8723be"
 value = "1"
 
 [[set]]
+id = "mod_rtlwifi"
+value = "1"
+
+[[set]]
 id = "mod_sbp2"
 value = "1"
 
@@ -662,7 +846,15 @@ id = "mod_snd_atiixp_modem"
 value = "1"
 
 [[set]]
+id = "mod_snd_aw2"
+value = "1"
+
+[[set]]
 id = "mod_snd_intel8x0m"
+value = "1"
+
+[[set]]
+id = "mod_snd_pcsp"
 value = "1"
 
 [[set]]
@@ -670,7 +862,15 @@ id = "mod_snd_via82xx_modem"
 value = "1"
 
 [[set]]
+id = "mod_sol"
+value = "1"
+
+[[set]]
 id = "mod_sr_mod"
+value = "1"
+
+[[set]]
+id = "mod_think_lmi"
 value = "1"
 
 [[set]]
@@ -686,6 +886,14 @@ id = "mod_ufs"
 value = "1"
 
 [[set]]
+id = "mod_usbkbd"
+value = "1"
+
+[[set]]
+id = "mod_usbmouse"
+value = "1"
+
+[[set]]
 id = "mod_v4l2loopback"
 value = "1"
 
@@ -694,11 +902,23 @@ id = "mod_vboxnetflt"
 value = "1"
 
 [[set]]
+id = "mod_vivid"
+value = "1"
+
+[[set]]
 id = "mod_vmw_balloon"
 value = "1"
 
 [[set]]
 id = "mod_vmw_vsock_vmci_transport"
+value = "1"
+
+[[set]]
+id = "mod_wiman"
+value = "1"
+
+[[set]]
+id = "mod_wmi_bmof"
 value = "1"
 
 [[set]]
@@ -748,6 +968,14 @@ value = "65536"
 [[set]]
 id = "printk_quiet"
 value = "3 3 3 3"
+
+[[set]]
+id = "promote_secondaries_all"
+value = "1"
+
+[[set]]
+id = "promote_secondaries_default"
+value = "1"
 
 [[set]]
 id = "protected_fifos"
@@ -980,10 +1208,6 @@ value = ""
 [[set]]
 id = "sudo_env_reset"
 value = ""
-
-[[set]]
-id = "sudo_logfile"
-value = "\"/var/log/sudo.log\""
 
 [[set]]
 id = "sudo_no_visiblepw"
