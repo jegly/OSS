@@ -235,3 +235,76 @@ class TestUnits(unittest.TestCase):
         self.assertFalse(units.Socket("tcp", "127.0.0.1", 631).public)
         self.assertFalse(units.Socket("tcp", "::1", 631).public)
         self.assertTrue(units.Socket("tcp", "0.0.0.0", 631).public)
+
+
+class TestSnap(unittest.TestCase):
+    """Snap interface permissions — the plug reference reaches an argv."""
+
+    def test_builds_a_disconnect(self) -> None:
+        from ossgui import snapd
+        self.assertEqual(
+            snapd.to_argv("firefox:home", "disconnect"),
+            ["/usr/bin/snap", "disconnect", "firefox:home"],
+        )
+
+    def test_rejects_a_bare_snap_name(self) -> None:
+        """`snap disconnect firefox` would disconnect everything it has."""
+        from ossgui import snapd
+        with self.assertRaises(snapd.SnapError):
+            snapd.to_argv("firefox", "disconnect")
+
+    def test_rejects_injection_in_a_plug_reference(self) -> None:
+        from ossgui import snapd
+        for bad in ("firefox:home; rm -rf /", "$(id):home", "firefox:", ":home",
+                    "FIREFOX:home", "firefox:home extra"):
+            with self.assertRaises(snapd.SnapError, msg=bad):
+                snapd.to_argv(bad, "disconnect")
+
+    def test_rejects_unknown_action(self) -> None:
+        from ossgui import snapd
+        with self.assertRaises(snapd.SnapError):
+            snapd.to_argv("firefox:home", "revoke")
+
+    def test_parses_connections_output(self) -> None:
+        from ossgui import snapd
+        sample = (
+            "Interface            Plug                    Slot              Notes\n"
+            "camera               firefox:camera          :camera           -\n"
+            "alsa                 firefox:alsa            -                 -\n"
+            "dbus                 -                       firefox:dbus      -\n"
+            "content[gpu-2404]    firefox:gpu-2404        mesa-2404:gpu     -\n"
+        )
+        rows = snapd.parse_connections(sample)
+        self.assertEqual(len(rows), 4)
+
+        camera = next(r for r in rows if r.interface == "camera")
+        self.assertTrue(camera.connected)
+        self.assertEqual(camera.snap, "firefox")
+
+        alsa = next(r for r in rows if r.interface == "alsa")
+        self.assertFalse(alsa.connected, "a '-' slot means not connected")
+
+        provided = next(r for r in rows if r.interface == "dbus")
+        self.assertEqual(provided.plug, "", "a '-' plug is absent, not a name")
+
+        content = next(r for r in rows if r.interface.startswith("content"))
+        self.assertEqual(content.base_interface, "content")
+
+    def test_essential_and_sensitive_are_flagged(self) -> None:
+        from ossgui import snapd
+        essential = snapd.Connection("browser-support", "firefox:browser-sandbox", ":x")
+        self.assertTrue(essential.essential)
+        sensitive = snapd.Connection("camera", "firefox:camera", ":camera")
+        self.assertTrue(sensitive.sensitive)
+        self.assertFalse(sensitive.essential)
+        plain = snapd.Connection("audio-playback", "firefox:audio-playback", ":x")
+        self.assertEqual(plain.describe, "")
+
+    def test_payload_validates_every_entry(self) -> None:
+        from ossgui import snapd
+        self.assertEqual(
+            snapd.from_payload({"firefox:camera": "disconnect"}),
+            {"firefox:camera": "disconnect"},
+        )
+        with self.assertRaises(snapd.SnapError):
+            snapd.from_payload({"firefox": "disconnect"})

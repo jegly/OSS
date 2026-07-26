@@ -1,0 +1,17 @@
+#  Snap permissions — connect and disconnect snap interfaces.
+#
+#  Not in the original BUILD_PLAN. Snaps have no permission UI outside
+#  `snap connections` and `snap disconnect`, so this section is the whole
+#  feature: see what each snap can reach, and revoke what it does not need.
+#
+#  No flags: the interfaces are discovered per snap at runtime, so there is
+#  nothing to enumerate in a data file.
+
+[section]
+id           = "snap"
+title        = "snap"
+nav          = "Access"
+order        = 78
+syntax       = "special"
+requires_pkg = "snapd"
+desc         = "What each installed snap is allowed to reach. A snap's plugs are the things it asks for; a plug connected to a slot is a granted permission, and disconnecting it revokes that access immediately. Both read commands work without root — only the changes need a password."

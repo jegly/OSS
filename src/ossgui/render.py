@@ -43,6 +43,7 @@ ALLOWED_COMMANDS = frozenset(
         "/usr/bin/update-desktop-database",
         "/usr/sbin/apparmor_parser",
         "/usr/sbin/aa-status",
+        "/usr/bin/snap",
     }
 )
 

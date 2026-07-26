@@ -85,6 +85,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.bootloader_change: dict = {}
         #: The staged USBGuard policy.
         self.usb_change: dict = {}
+        #: "snap:plug" -> connect|disconnect.
+        self.snap_changes: dict[str, str] = {}
 
         self.states = probe.all_states(catalogue, facts, staging.selection)
         self.unaffected = probe.unaffected_mitigations(catalogue, facts)
@@ -410,6 +412,12 @@ class MainWindow(Adw.ApplicationWindow):
                 self.grid_box.append(page(self))
                 self._refresh_chrome()
                 return
+            if section_id == "snap":
+                from .snap_page import SnapPage
+
+                self.grid_box.append(SnapPage(self))
+                self._refresh_chrome()
+                return
             if section_id == "apparmor":
                 from .apparmor_page import ApparmorPage
 
@@ -668,6 +676,7 @@ class MainWindow(Adw.ApplicationWindow):
             + len(self.permission_changes)
             + len(self.fstab_changes)
             + len(self.usb_change)
+            + len(self.snap_changes)
             + (1 if self.bootloader_change else 0)
         )
         if count:
@@ -753,7 +762,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.apparmor_changes.clear()
         self.apparmor = apparmor_module.read_unprivileged()
         for staged in (self.sandbox_changes, self.permission_changes,
-                       self.fstab_changes, self.bootloader_change, self.usb_change):
+                       self.fstab_changes, self.bootloader_change, self.usb_change,
+                       self.snap_changes):
             staged.clear()
         self.apparmor_changes.clear()
         self.staging.reset_to_baseline()

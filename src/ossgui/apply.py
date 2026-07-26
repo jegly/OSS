@@ -31,6 +31,7 @@ from . import fstab as fstab_module
 from . import permissions as permissions_module
 from . import probe, render, ufw as ufw_module, units as units_module
 from . import sandbox as sandbox_module
+from . import snapd as snapd_module
 from . import usb as usb_module
 from .catalogue import Catalogue
 from .render import ALLOWED_COMMANDS, Plan
@@ -317,6 +318,7 @@ def apply_plan(
     unit_changes: dict[str, str] | None = None,
     apparmor_changes: dict[str, str] | None = None,
     extras: dict | None = None,
+    snap_changes: dict[str, str] | None = None,
 ) -> Result:
     """Run the whole transaction, rolling back on any failure."""
     result = Result()
@@ -377,6 +379,14 @@ def apply_plan(
             apply_fstab(extras["fstab"], result)
         if "usb" in extras:
             apply_usb(extras["usb"], result)
+
+        # Snap interfaces: snapd applies these immediately, no reload needed.
+        for argv, why in snapd_module.plan_commands(snap_changes or {}):
+            code, output = run(argv)
+            ok = code == 0
+            result.steps.append(Step("command", " ".join(argv), ok, output))
+            if not ok:
+                raise ApplyError(f"{why} failed: {output}")
 
         # 4. AppArmor profile modes, which are symlinks plus a parser reload.
         if apparmor_changes:
@@ -835,6 +845,13 @@ def run_payload(catalogue: Catalogue, payload: dict) -> Result:
             return Result(ok=False, error=f"bad bootloader payload: {exc}")
         extras["bootloader"] = payload["bootloader"]
 
+    snap_changes: dict[str, str] = {}
+    if "snap" in payload:
+        try:
+            snap_changes = snapd_module.from_payload(payload["snap"])
+        except snapd_module.SnapError as exc:
+            return Result(ok=False, error=f"bad snap payload: {exc}")
+
     apparmor_changes: dict[str, str] = {}
     if "apparmor" in payload:
         try:
@@ -854,10 +871,12 @@ def run_payload(catalogue: Catalogue, payload: dict) -> Result:
         and wanted_firewall is None
         and not unit_changes
         and not apparmor_changes
+        and not snap_changes
         and not extras
     ):
         return Result(ok=True, error="", steps=[Step("write", "nothing to do", True)])
 
     return apply_plan(
-        catalogue, plan, selection, wanted_firewall, unit_changes, apparmor_changes, extras
+        catalogue, plan, selection, wanted_firewall, unit_changes, apparmor_changes,
+        extras, snap_changes,
     )

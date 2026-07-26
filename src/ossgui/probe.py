@@ -175,6 +175,7 @@ _PACKAGE_BINARIES = {
     "usbguard": "usbguard",
     "openssh-server": "sshd",
     "debsums": "debsums",
+    "snapd": "snap",
 }
 
 

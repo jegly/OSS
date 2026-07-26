@@ -20,6 +20,7 @@ from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 from .. import privileged, probe, render, sysctl_chain  # noqa: E402
 from .. import apparmor as apparmor_module  # noqa: E402
+from .. import snapd as snapd_module  # noqa: E402
 from .. import ufw as ufw_module, units as units_module  # noqa: E402
 from .style import mark_solid  # noqa: E402
 
@@ -350,6 +351,22 @@ class ReviewDialog(Adw.Window):
                 group.add(self._row(" ".join(change.command), change.why))
             page.add(group)
 
+        if self.window.snap_changes:
+            revoked = [
+                p for p, a in self.window.snap_changes.items() if a == "disconnect"
+            ]
+            group = Adw.PreferencesGroup(
+                title="Snap permissions",
+                description=(
+                    f"{len(revoked)} revoked, "
+                    f"{len(self.window.snap_changes) - len(revoked)} granted. "
+                    "snapd applies these immediately — no reboot, no reinstall."
+                ),
+            )
+            for argv, why in snapd_module.plan_commands(self.window.snap_changes):
+                group.add(self._row(" ".join(argv), why))
+            page.add(group)
+
         if self.window.unit_changes:
             group = Adw.PreferencesGroup(
                 title="Units",
@@ -439,10 +456,12 @@ class ApplyProgressDialog(Adw.Window):
         )
         unit_changes = dict(self.window.unit_changes)
         apparmor_changes = dict(self.window.apparmor_changes)
+        snap_changes = dict(self.window.snap_changes)
         extras = self.window.extras_payload()
         thread = threading.Thread(
             target=self._worker,
-            args=(selection, firewall, unit_changes, apparmor_changes, extras),
+            args=(selection, firewall, unit_changes, apparmor_changes, extras,
+                  snap_changes),
             daemon=True,
         )
         thread.start()
@@ -454,6 +473,7 @@ class ApplyProgressDialog(Adw.Window):
         unit_changes: dict,
         apparmor_changes: dict,
         extras: dict,
+        snap_changes: dict,
     ) -> None:
         outcome = privileged.apply(
             selection,
@@ -461,6 +481,7 @@ class ApplyProgressDialog(Adw.Window):
             unit_changes=unit_changes,
             apparmor_changes=apparmor_changes,
             extras=extras,
+            snap_changes=snap_changes,
         )
         user_results = []
         if outcome.ok:
