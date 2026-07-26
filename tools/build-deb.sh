@@ -16,8 +16,8 @@ install -D -m 0755 oss "$STAGE/usr/bin/oss"
 install -D -m 0755 helper/oss-helper "$STAGE/usr/libexec/oss-helper"
 install -D -m 0644 data/polkit/com.jegly.OSS.policy \
         "$STAGE/usr/share/polkit-1/actions/com.jegly.OSS.policy"
-install -D -m 0644 data/desktop/oss.desktop \
-        "$STAGE/usr/share/applications/oss.desktop"
+install -D -m 0644 data/desktop/com.jegly.OSS.desktop \
+        "$STAGE/usr/share/applications/com.jegly.OSS.desktop"
 # The typefaces are part of the app, not a separate thing to go and install.
 install -d "$STAGE/usr/share/fonts/oss"
 install -m 0644 data/fonts/*.ttf "$STAGE/usr/share/fonts/oss/"

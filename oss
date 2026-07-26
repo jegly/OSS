@@ -6,7 +6,18 @@ import sys
 # Installed layout; harmless in the dev tree where the package is found first.
 sys.path.insert(0, "/usr/lib/oss")
 
+import gi
+
+gi.require_version("Gtk", "4.0")
+from gi.repository import GLib
+
+from ossgui.paths import APP_ID
 from ossgui.ui.app import main
 
 if __name__ == "__main__":
+    # GTK's Wayland backend derives the toplevel app_id from the program name,
+    # and GNOME matches a window to its .desktop file on that id. Left as
+    # "oss" (or "python3") the shell cannot make the match, so the window gets a
+    # generic dock icon even though the app grid shows the right one.
+    GLib.set_prgname(APP_ID)
     sys.exit(main(sys.argv))

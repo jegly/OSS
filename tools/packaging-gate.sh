@@ -49,7 +49,7 @@ for path in \
     ./usr/bin/oss \
     ./usr/libexec/oss-helper \
     ./usr/share/polkit-1/actions/com.jegly.OSS.policy \
-    ./usr/share/applications/oss.desktop \
+    ./usr/share/applications/com.jegly.OSS.desktop \
     ./usr/share/oss/catalogue/10-sysctl.toml \
     ./usr/share/oss/themes/ptyxis.toml \
     ./usr/lib/oss/ossgui/apply.py

@@ -9,3 +9,4 @@ Terminal=false
 Categories=System;Settings;Security;
 Keywords=security;hardening;firewall;sysctl;apparmor;
 StartupNotify=true
+StartupWMClass=com.jegly.OSS
