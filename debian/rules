@@ -1,0 +1,25 @@
+#!/usr/bin/make -f
+export DH_VERBOSE = 1
+
+%:
+	dh $@
+
+override_dh_auto_build:
+
+override_dh_auto_test:
+	python3 -m unittest discover -s tests
+
+override_dh_auto_install:
+	install -d debian/hardening-gui/usr/lib/hardening-gui
+	cp -r src/hardeninggui debian/hardening-gui/usr/lib/hardening-gui/
+	find debian/hardening-gui -name '__pycache__' -type d -exec rm -rf {} +
+	install -D -m 0755 hardening-gui debian/hardening-gui/usr/bin/hardening-gui
+	install -D -m 0755 helper/hardening-gui-helper \
+	        debian/hardening-gui/usr/libexec/hardening-gui-helper
+	install -D -m 0644 data/polkit/org.hardening.ControlCenter.policy \
+	        debian/hardening-gui/usr/share/polkit-1/actions/org.hardening.ControlCenter.policy
+	install -D -m 0644 data/desktop/hardening-gui.desktop \
+	        debian/hardening-gui/usr/share/applications/hardening-gui.desktop
+	install -d debian/hardening-gui/usr/share/hardening-gui
+	cp -r data/catalogue data/presets data/themes \
+	        debian/hardening-gui/usr/share/hardening-gui/
