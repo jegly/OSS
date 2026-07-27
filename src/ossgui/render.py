@@ -14,7 +14,7 @@ import re
 import shlex
 from dataclasses import dataclass, field
 
-from . import probe
+from . import distro, probe
 from .catalogue import Catalogue, Flag, Section
 
 from . import branding
@@ -33,6 +33,13 @@ ALLOWED_COMMANDS = frozenset(
         "/usr/sbin/depmod",
         "/usr/sbin/update-grub",
         "/usr/sbin/update-initramfs",
+        # Non-Debian equivalents of the two above, substituted per family by
+        # ossgui.distro. The helper compiles its allowlist from this set, so a
+        # command missing here is refused no matter which family selects it.
+        "/usr/bin/grub-mkconfig",
+        "/usr/sbin/grub2-mkconfig",
+        "/usr/bin/mkinitcpio",
+        "/usr/bin/dracut",
         "/usr/bin/systemctl",
         "/usr/sbin/ufw",
         "/usr/sbin/sshd",
@@ -47,6 +54,9 @@ ALLOWED_COMMANDS = frozenset(
         "/usr/bin/apt-get",
         "/usr/bin/dpkg-statoverride",
         "/usr/bin/chattr",
+        "/usr/sbin/userdel",
+        "/usr/sbin/groupdel",
+        "/usr/bin/gpasswd",
     }
 )
 
@@ -82,6 +92,14 @@ class Command:
     argv: tuple[str, ...]
     why: str = ""
     user: bool = False
+    #: True when this command *is* the change rather than a reload of files
+    #: that carry it. Rollback re-runs reloads over the restored files, which
+    #: is how a deleted drop-in takes effect — but re-running a mutation would
+    #: apply it a second time instead of undoing it. `systemctl mask --now` is
+    #: the case that matters: it has no file behind it, so a rollback that
+    #: replayed it would leave the service masked and stopped while reporting
+    #: the transaction as reverted.
+    mutates: bool = False
 
     def __str__(self) -> str:
         return shlex.join(self.argv)
@@ -105,8 +123,42 @@ class Plan:
         return [w.path for w in self.writes] + [r.path for r in self.removes]
 
 
+def section_skip_reason(section: Section) -> str:
+    """Why this section is not applied here, or "" when it is.
+
+    One source of truth for the two conditions that make a section a no-op on
+    this machine, because render() and apply.read_back() must agree about it.
+    When they disagreed, the plan quietly skipped the section and the read-back
+    then verified its flags anyway and reported every one of them as "did not
+    take" — which reads as 26 failures when in fact nothing was attempted.
+    """
+    if section.requires_pkg and not probe.package_present(section.requires_pkg):
+        return (
+            f"{section.requires_pkg} is not installed, so nothing on this "
+            f"system reads {section.target or 'this section’s files'}"
+        )
+    if not distro.section_supported(section):
+        return (
+            f"this section only applies on "
+            f"{', '.join(section.families)}, and this is "
+            f"{probe.detect_family()}"
+        )
+    return ""
+
+
 def _selected(section: Section, selection: dict[str, str]) -> list[tuple[Flag, str]]:
-    return [(f, selection[f.id]) for f in section.flags if f.id in selection]
+    """Selected flags for this section, minus any that do not apply here.
+
+    A flag scoped to another family is dropped rather than rendered: writing it
+    would put a line in a file about something this system does not have, and
+    for the services section it would mask a unit name that does not exist —
+    which systemd accepts silently.
+    """
+    return [
+        (f, selection[f.id])
+        for f in section.flags
+        if f.id in selection and distro.flag_supported(f)
+    ]
 
 
 # --------------------------------------------------------------------------- #
@@ -250,14 +302,15 @@ def _body_logindefs(pairs: list[tuple[Flag, str]], current: str) -> str:
 def _service_commands(pairs: list[tuple[Flag, str]]) -> list[Command]:
     cmds = []
     for flag, value in pairs:
-        if value == "mask":
-            cmds.append(
-                Command(("/usr/bin/systemctl", "mask", "--now", flag.key), f"mask {flag.key}")
-            )
-        elif value == "disable":
-            cmds.append(
-                Command(("/usr/bin/systemctl", "disable", "--now", flag.key), f"disable {flag.key}")
-            )
+        if value not in ("mask", "disable"):
+            continue
+        # Through resolve_command for the unit name: Debian calls these
+        # smbd/nmbd/rsync where everyone else uses the upstream smb/nmb/rsyncd.
+        # Masking a name that does not exist quietly succeeds — systemd just
+        # links it to /dev/null — so getting this wrong leaves Samba answering
+        # on the network while the app reports the unit as masked.
+        argv = distro.resolve_command(("/usr/bin/systemctl", value, "--now", flag.key))
+        cmds.append(Command(argv, f"{value} {argv[-1]}", mutates=True))
     return cmds
 
 
@@ -383,7 +436,10 @@ def render_section(
     if touched:
         # Reverting needs the reload too — a deleted sysctl drop-in changes
         # nothing live until `sysctl --system` runs.
-        plan.commands.extend(Command(cmd, f"reload {section.id}") for cmd in section.reload)
+        plan.commands.extend(
+            Command(distro.resolve_command(cmd), f"reload {section.id}")
+            for cmd in section.reload
+        )
     return plan
 
 
@@ -403,10 +459,10 @@ def render(
     for section in catalogue.sections:
         if sections is not None and section.id not in sections:
             continue
-        if section.requires_pkg and not probe.package_present(section.requires_pkg):
-            # The tool that would read this file is not installed. Writing it
-            # anyway means the reload command fails and takes the whole
-            # transaction down with it.
+        if section_skip_reason(section):
+            # Either the tool that reads these files is not installed — writing
+            # anyway would fail the reload and take the whole transaction with
+            # it — or nothing on this family reads them at all.
             continue
         sub = render_section(section, selection, current)
         plan.writes.extend(sub.writes)

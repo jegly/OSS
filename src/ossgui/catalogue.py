@@ -111,6 +111,12 @@ class Flag:
     #: Capability tokens this flag needs — see probe.has_capability. Used where a
     #: directive exists in one implementation of a tool but not another.
     needs: tuple[str, ...] = ()
+    #: Distro families this flag applies to, empty meaning all of them. For a
+    #: setting whose subject does not exist elsewhere at all — Ubuntu's
+    #: whoopsie and apt-news have no counterpart on Fedora or Arch. A unit that
+    #: merely has a *different name* is not this: that belongs in
+    #: ossgui.distro._UNITS, so the flag still applies and just resolves.
+    families: tuple[str, ...] = ()
 
     @property
     def is_choice(self) -> bool:
@@ -168,6 +174,12 @@ class Section:
     implemented: bool = True
     #: BUILD_PLAN section this maps to, shown in the placeholder.
     plan_ref: str = ""
+    #: Distro families this section applies to, empty meaning all of them. Set
+    #: only where the *target file* has no equivalent elsewhere — a Debian
+    #: grub.d drop-in is not read by Fedora's grub2-mkconfig at all, so
+    #: offering it there would write a file nothing consumes. See
+    #: :mod:`ossgui.distro`.
+    families: tuple[str, ...] = ()
     flags: list[Flag] = field(default_factory=list)
 
     def target_for(self, flag: Flag) -> str:
@@ -320,6 +332,7 @@ def _parse_flag(raw: dict, section: Section, path: Path) -> Flag:
         editable=editable,
         pattern=pattern,
         needs=tuple(str(v) for v in raw.get("needs", ())),
+        families=tuple(str(v) for v in raw.get("families", ())),
     )
 
 
@@ -345,6 +358,7 @@ def _parse_section(raw: dict, path: Path) -> Section:
         in_place=bool(raw.get("in_place", False)),
         implemented=bool(raw.get("implemented", True)),
         plan_ref=str(raw.get("plan_ref", "")),
+        families=tuple(str(f) for f in raw.get("families", ())),
     )
 
 

@@ -10,6 +10,10 @@ syntax  = "grub"
 target  = "/etc/default/grub.d/99-oss.cfg"
 reload  = [["/usr/sbin/update-grub"]]
 desc    = "Kernel command-line hardening. Every flag here needs a reboot."
+#  /etc/default/grub.d/ is a Debian mechanism: grub-mkconfig sources it only
+#  because Debian patches it to. Fedora and Arch read /etc/default/grub and
+#  nothing else, so a drop-in here would be written and then ignored.
+families = ["debian"]
 
 # --------------------------------------------------------------------------- #
 #  memory
@@ -672,3 +676,59 @@ why     = "Shrinks the window for editing the kernel command line"
 risk    = "caution"
 reboot  = true
 breaks  = "Choosing an older kernel at boot"
+
+# --------------------------------------------------------------------------- #
+#  more hardening parameters — each confirmed present in this kernel's config
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "ia32_emulation_off"
+group   = "grub / memory"
+key     = "ia32_emulation"
+value   = "0"
+default = "1"
+title   = "No 32-bit syscall entry"
+desc    = "Removes the compat syscall table"
+why     = "The 32-bit compatibility layer is a second syscall entry with a long bug history and almost no users"
+help    = "Needs CONFIG_IA32_EMULATION, which this kernel has. Anything genuinely 32-bit stops working — check with `file` on your binaries first if unsure."
+risk    = "caution"
+reboot  = true
+breaks  = "32-bit binaries, including some games and old installers"
+
+[[flag]]
+id      = "hardened_usercopy"
+group   = "grub / memory"
+key     = "hardened_usercopy"
+value   = "1"
+default = "1"
+title   = "Check user-space copies"
+desc    = "Bounds-checks copy_to/from_user"
+why     = "Catches the kernel copying past the end of a buffer, which is how a heap overflow becomes a leak"
+risk    = "safe"
+reboot  = true
+breaks  = "Small overhead on syscall-heavy work"
+
+[[flag]]
+id      = "spectre_bhi"
+group   = "grub / cpu mitigations"
+key     = "spectre_bhi"
+value   = "on"
+default = "auto"
+title   = "Branch History Injection"
+desc    = "The 2024 Spectre-v2 variant"
+why     = "BHI works around the existing Spectre-v2 defences by poisoning branch history instead"
+risk    = "safe"
+reboot  = true
+
+[[flag]]
+id      = "iommu_forcedac"
+group   = "grub / iommu & dma"
+key     = "iommu.forcedac"
+value   = "1"
+default = "0"
+title   = "Force 64-bit DMA"
+desc    = "No DMA below the 4GB line"
+why     = "Keeps devices out of the low memory that legacy attacks target"
+risk    = "caution"
+reboot  = true
+breaks  = "Old devices that can only address 32 bits"

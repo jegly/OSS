@@ -38,6 +38,124 @@ class State(str, Enum):
     UNKNOWN = "unknown"  # we could not read it (unreadable, no tool)
 
 
+#: Distro families OSS knows how to write for. A family is a group of
+#: distributions that agree about the things this app touches: where drop-ins
+#: go, what the bootloader update command is, which package manager verifies
+#: files, and whether the MAC layer is AppArmor or SELinux.
+FAMILIES = ("debian", "arch", "fedora", "suse")
+
+#: os-release ID values mapped to a family, for distributions whose ID_LIKE is
+#: missing or unhelpful. ID_LIKE handles the long tail of derivatives, so this
+#: only needs the roots and the ones that get it wrong.
+_FAMILY_BY_ID = {
+    "debian": "debian",
+    "ubuntu": "debian",
+    "arch": "arch",
+    "archarm": "arch",
+    "fedora": "fedora",
+    "rhel": "fedora",
+    "centos": "fedora",
+    "opensuse": "suse",
+    "opensuse-leap": "suse",
+    "opensuse-tumbleweed": "suse",
+    "sles": "suse",
+}
+
+#: ID_LIKE tokens, checked in order. A derivative usually names its parent
+#: here even when its own ID is unknown to us — Mint says "ubuntu debian",
+#: Manjaro says "arch", Nobara says "fedora".
+_FAMILY_BY_LIKE = {
+    "debian": "debian",
+    "ubuntu": "debian",
+    "arch": "arch",
+    "fedora": "fedora",
+    "rhel": "fedora",
+    "centos": "fedora",
+    "suse": "suse",
+    "opensuse": "suse",
+}
+
+
+def parse_os_release(content: str) -> dict[str, str]:
+    """Parse os-release into a plain mapping.
+
+    The format is shell-like but not shell: values may be quoted with either
+    kind of quote, and are not evaluated. Anything malformed is skipped rather
+    than raising, because this file being odd is not a reason to refuse to
+    start.
+    """
+    out: dict[str, str] = {}
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        out[key.strip()] = value
+    return out
+
+
+def family_from_os_release(data: dict[str, str]) -> str:
+    """Work out the family from parsed os-release fields.
+
+    ID is checked first because it is exact. ID_LIKE is the fallback and is a
+    space-separated list in rough order of closeness, so it is walked in the
+    order the distribution gave rather than ours.
+    """
+    distro_id = data.get("ID", "").strip().lower()
+    if distro_id in _FAMILY_BY_ID:
+        return _FAMILY_BY_ID[distro_id]
+    for token in data.get("ID_LIKE", "").lower().split():
+        if token in _FAMILY_BY_LIKE:
+            return _FAMILY_BY_LIKE[token]
+    return "unknown"
+
+
+@lru_cache(maxsize=1)
+def detect_family() -> str:
+    """Which distro family this machine belongs to, or ``"unknown"``.
+
+    Deliberately automatic. The alternative — asking at startup — is asking the
+    user a question the machine can already answer, and a wrong answer would
+    have OSS write config to paths that do nothing on this system. Silent
+    no-op config is the failure mode this whole application exists to catch, so
+    it is not one to introduce at the front door.
+
+    ``OSS_DISTRO_FAMILY`` overrides, for tests and for the preferences override
+    offered when detection comes back unknown.
+    """
+    override = os.environ.get("OSS_DISTRO_FAMILY", "").strip().lower()
+    if override in FAMILIES:
+        return override
+
+    # /etc/os-release is the modern path and is normally a symlink to the one
+    # in /usr/lib; the second is checked for the case where /etc has been
+    # emptied, which happens on some image-based installs.
+    for path in ("/etc/os-release", "/usr/lib/os-release"):
+        content = _read_text(path)
+        if content is None:
+            continue
+        family = family_from_os_release(parse_os_release(content))
+        if family != "unknown":
+            return family
+    return "unknown"
+
+
+def distro_name() -> str:
+    """Human-readable name for the running system, for the preferences page."""
+    for path in ("/etc/os-release", "/usr/lib/os-release"):
+        content = _read_text(path)
+        if content is None:
+            continue
+        data = parse_os_release(content)
+        name = data.get("PRETTY_NAME") or data.get("NAME")
+        if name:
+            return name
+    return "unknown system"
+
+
 @dataclass
 class FlagState:
     """What we know about one flag right now."""
@@ -76,13 +194,17 @@ def _read_text(path: str | Path) -> str | None:
         return None
 
 
-def _run(argv: list[str]) -> str | None:
+def _run(argv: list[str], timeout: int | None = None) -> str | None:
     """Run a read-only command, return stdout or None if it isn't usable."""
     if not os.path.isabs(argv[0]) and shutil.which(argv[0]) is None:
         return None
     try:
         result = subprocess.run(
-            argv, capture_output=True, text=True, timeout=TIMEOUT, check=False
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT if timeout is None else timeout,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -137,17 +259,50 @@ def read_units() -> dict[str, str]:
     return out
 
 
+#: gsettings is the one probe that talks to a per-user session daemon rather
+#: than reading a file, so it is the one that can block rather than fail.
+GSETTINGS_TIMEOUT = 3
+
+
 def read_gsettings(keys: list[str]) -> dict[str, str]:
-    """Current value of each ``"schema key"`` pair, as gsettings prints it."""
-    out: dict[str, str] = {}
+    """Current value of each ``"schema key"`` pair, as gsettings prints it.
+
+    Returns nothing at all when there is no session bus. The privileged helper
+    calls this through ``gather()`` during the post-apply read-back, and pkexec
+    gives it a root environment with no ``DBUS_SESSION_BUS_ADDRESS`` — so every
+    lookup there is both meaningless (it would read *root's* dconf, not the
+    user's) and liable to sit waiting on a bus that isn't there.
+
+    One call per schema rather than per key: 27 keys across 9 schemas was 27
+    subprocess spawns, and at the old 10s ceiling a stalled dconf could hold
+    the whole apply for four and a half minutes.
+    """
+    if not os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
+        return {}
+
+    wanted: dict[str, list[str]] = {}
     for pair in keys:
         schema, _, key = pair.rpartition(" ")
-        if not schema:
+        if schema:
+            wanted.setdefault(schema, []).append(key)
+
+    out: dict[str, str] = {}
+    for schema, schema_keys in wanted.items():
+        raw = _run(
+            ["/usr/bin/gsettings", "list-recursively", schema],
+            timeout=GSETTINGS_TIMEOUT,
+        )
+        if raw is None:
             continue
-        raw = _run(["/usr/bin/gsettings", "get", schema, key])
-        if raw is not None:
-            # gsettings quotes strings and prints booleans bare.
-            out[pair] = raw.strip().strip("'")
+        # "schema key value", one per line; the value may contain spaces.
+        found = {}
+        for line in raw.splitlines():
+            parts = line.split(" ", 2)
+            if len(parts) == 3 and parts[0] == schema:
+                found[parts[1]] = parts[2].strip().strip("'")
+        for key in schema_keys:
+            if key in found:
+                out[f"{schema} {key}"] = found[key]
     return out
 
 
@@ -220,6 +375,11 @@ def has_capability(token: str) -> bool:
         # "unknown" is treated as available: better to let visudo have the final
         # say than to hide a flag because a version string could not be parsed.
         return sudo_implementation() != "sudo-rs"
+    if token.startswith("path:"):
+        # A rule that watches a path (e.g. an audit -w rule) fails the whole
+        # rule set at load time if the path does not exist — this is how an
+        # optional-package's config file stays out of the way until installed.
+        return os.path.exists(token[len("path:"):])
     return True
 
 
@@ -230,6 +390,8 @@ def capability_reason(token: str) -> str:
             "which does not implement it — visudo rejects it, so it cannot be "
             "applied here."
         )
+    if token.startswith("path:"):
+        return f"{token[len('path:'):]} does not exist on this system yet."
     return f"Requires {token}, which is not available on this system."
 
 

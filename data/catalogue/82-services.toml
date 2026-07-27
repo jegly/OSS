@@ -100,6 +100,7 @@ breaks  = "ALL Wi-Fi — leave this alone on a laptop"
 id      = "svc_whoopsie"
 group   = "services / crash reporting"
 key     = "whoopsie.service"
+families = ["debian"]
 value   = "mask"
 default = "enabled"
 values  = ["disable", "mask"]
@@ -114,6 +115,7 @@ breaks  = "Automatic crash reporting"
 id      = "svc_apport"
 group   = "services / crash reporting"
 key     = "apport.service"
+families = ["debian"]
 value   = "mask"
 default = "enabled"
 values  = ["disable", "mask"]
@@ -288,3 +290,143 @@ title   = "debug-shell"
 desc    = "Root shell on tty9, no password"
 why     = "It is exactly what it sounds like — always mask this"
 risk    = "safe"
+
+[[flag]]
+id      = "svc_geoclue"
+group   = "services / privacy"
+key     = "geoclue.service"
+value   = "mask"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "geoclue"
+desc    = "Location lookup service"
+why     = "Resolves your physical position from the Wi-Fi networks around you"
+risk    = "safe"
+breaks  = "Automatic timezone, weather, maps"
+
+[[flag]]
+id      = "svc_apt_news"
+group   = "services / privacy"
+key     = "apt-news.service"
+families = ["debian"]
+value   = "mask"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "apt-news"
+desc    = "Fetches messages shown by apt"
+why     = "Contacts Canonical on a timer to fetch text to print during upgrades"
+risk    = "safe"
+
+[[flag]]
+id      = "svc_esm_cache"
+group   = "services / privacy"
+key     = "esm-cache.service"
+families = ["debian"]
+value   = "mask"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "esm-cache"
+desc    = "Ubuntu Pro subscription check"
+why     = "Another scheduled call home, for a subscription you may not have"
+risk    = "safe"
+
+[[flag]]
+id      = "svc_fwupd"
+group   = "services / privacy"
+key     = "fwupd.service"
+value   = "disable"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "fwupd"
+desc    = "Firmware update daemon"
+why     = "Talks to a remote metadata service and can write your device firmware"
+help    = "Genuinely useful — firmware bugs are real and this is how they get fixed. Turning it off means updating firmware by hand instead."
+risk    = "caution"
+breaks  = "Automatic firmware updates"
+
+[[flag]]
+id      = "svc_saned"
+group   = "services / file sharing"
+key     = "saned.service"
+value   = "mask"
+default = "disabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "saned"
+desc    = "Network scanner daemon — tcp/6566"
+why     = "Shares a scanner over the network, which almost nobody wants"
+risk    = "safe"
+
+[[flag]]
+id      = "svc_rtkit"
+group   = "services / desktop plumbing"
+key     = "rtkit-daemon.service"
+value   = "disable"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "rtkit-daemon"
+desc    = "Grants realtime scheduling"
+why     = "Hands out realtime priority to unprivileged requests, which is a local DoS primitive"
+risk    = "caution"
+breaks  = "Low-latency audio (PipeWire and JACK)"
+
+[[flag]]
+id      = "svc_colord"
+group   = "services / desktop plumbing"
+key     = "colord.service"
+value   = "disable"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "colord"
+desc    = "Colour management daemon"
+why     = "One less privileged D-Bus service on a machine with no colour-calibrated display"
+risk    = "safe"
+breaks  = "Display and printer colour profiles"
+
+[[flag]]
+id      = "svc_speech_dispatcher"
+group   = "services / desktop plumbing"
+key     = "speech-dispatcher.service"
+value   = "disable"
+default = "disabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "speech-dispatcher"
+desc    = "Text-to-speech daemon"
+why     = "Unused on most desktops"
+risk    = "safe"
+breaks  = "Screen readers and any accessibility speech output"
+
+[[flag]]
+id      = "svc_spice_vdagent"
+group   = "services / desktop plumbing"
+key     = "spice-vdagent.service"
+value   = "mask"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "spice-vdagent"
+desc    = "Guest agent for SPICE VMs"
+why     = "Shares clipboard and files with a hypervisor — pointless outside a VM, and a channel inside one"
+risk    = "safe"
+breaks  = "Clipboard sharing and resolution matching in a VM"
+
+[[flag]]
+id      = "svc_anacron"
+group   = "services / desktop plumbing"
+key     = "anacron.service"
+value   = "disable"
+default = "enabled"
+values  = ["disable", "mask"]
+labels  = ["disable", "mask (can't be started)"]
+title   = "anacron"
+desc    = "Runs missed cron jobs"
+why     = "Another scheduler to audit; systemd timers cover the same ground"
+risk    = "caution"
+breaks  = "Periodic jobs that were missed while powered off"

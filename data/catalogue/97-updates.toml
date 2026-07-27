@@ -11,6 +11,9 @@ order   = 97
 syntax  = "apt"
 target  = "/etc/apt/apt.conf.d/99-oss"
 desc    = "Unattended security upgrades and how often apt checks."
+#  apt.conf.d is apt-only. Fedora schedules updates through dnf-automatic and
+#  Arch has no equivalent at all, so this section does not translate.
+families = ["debian"]
 
 [[flag]]
 id      = "apt_periodic_update"
@@ -111,4 +114,106 @@ default = "now"
 title   = "Reboot at 4am"
 desc    = "If auto-reboot is on, do it overnight"
 why     = "Only matters with automatic reboot enabled"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  repository trust
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "apt_no_insecure_repos"
+group   = "updates / repository trust"
+key     = "Acquire::AllowInsecureRepositories"
+value   = "false"
+default = "false"
+title   = "No unsigned repositories"
+desc    = "Refuses repos without a valid signature"
+why     = "An unsigned repository is a package feed anyone on the path can rewrite"
+risk    = "safe"
+breaks  = "Third-party repos that never set up a signing key"
+
+[[flag]]
+id      = "apt_no_downgrade_insecure"
+group   = "updates / repository trust"
+key     = "Acquire::AllowDowngradeToInsecureRepositories"
+value   = "false"
+default = "false"
+title   = "No silent downgrade to unsigned"
+desc    = "A signed repo cannot become unsigned"
+why     = "Otherwise dropping the signature is enough to turn a trusted repo into an untrusted one"
+risk    = "safe"
+
+[[flag]]
+id      = "apt_check_valid_until"
+group   = "updates / repository trust"
+key     = "Acquire::Check-Valid-Until"
+value   = "true"
+default = "true"
+title   = "Honour repository expiry"
+desc    = "Rejects stale index files"
+why     = "The expiry date is what stops a replay of old indexes that hide a security fix"
+risk    = "safe"
+breaks  = "Snapshot and archived repositories, which are deliberately stale"
+
+[[flag]]
+id      = "apt_max_valid_time"
+group   = "updates / repository trust"
+key     = "Acquire::Max-ValidTime"
+value   = "86400"
+default = "0"
+title   = "Indexes expire after a day"
+desc    = "Own limit on top of the repo's"
+why     = "Some repos set a generous expiry; this caps how old an index you will accept regardless"
+risk    = "caution"
+breaks  = "apt complains until you update, if you go a day without"
+
+[[flag]]
+id      = "apt_no_redirect"
+group   = "updates / repository trust"
+key     = "Acquire::http::AllowRedirect"
+value   = "false"
+default = "true"
+title   = "No HTTP redirects"
+desc    = "Mirror must answer directly"
+why     = "A redirect moves your download to a host you never configured"
+risk    = "caution"
+breaks  = "Mirror redirectors, including some CDN-backed archives"
+
+# --------------------------------------------------------------------------- #
+#  install surface
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "apt_no_recommends"
+group   = "updates / install surface"
+key     = "APT::Install-Recommends"
+value   = "false"
+default = "true"
+title   = "No recommended packages"
+desc    = "Installs only what is required"
+why     = "Recommends is how one package quietly brings in twenty more, each with its own bugs"
+help    = "This is the single biggest lever on how much software ends up on the machine. It also means you occasionally have to install something by hand that used to arrive on its own."
+risk    = "caution"
+breaks  = "Packages that assume their recommends are present"
+
+[[flag]]
+id      = "apt_no_suggests"
+group   = "updates / install surface"
+key     = "APT::Install-Suggests"
+value   = "false"
+default = "false"
+title   = "No suggested packages"
+desc    = "Ignores the suggests field"
+why     = "Same reasoning, one step further out"
+risk    = "safe"
+
+[[flag]]
+id      = "apt_sandbox_user"
+group   = "updates / install surface"
+key     = "APT::Sandbox::User"
+value   = "_apt"
+default = "_apt"
+title   = "Download as _apt"
+desc    = "Fetching drops privileges"
+why     = "The part of apt that talks to the network should not be the part running as root"
 risk    = "safe"
