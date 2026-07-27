@@ -20,7 +20,7 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, "/usr/lib/oss")
+sys.path.insert(0, "/usr/share/oss")
 
 from ossgui import catalogue as catalogue_module  # noqa: E402
 from ossgui.apply import Result, run_payload  # noqa: E402

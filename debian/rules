@@ -10,8 +10,8 @@ override_dh_auto_test:
 	python3 -m unittest discover -s tests
 
 override_dh_auto_install:
-	install -d debian/oss/usr/lib/oss
-	cp -r src/ossgui debian/oss/usr/lib/oss/
+	install -d debian/oss/usr/share/oss
+	cp -r src/ossgui debian/oss/usr/share/oss/
 	find debian/oss -name '__pycache__' -type d -exec rm -rf {} +
 	install -D -m 0755 oss debian/oss/usr/bin/oss
 	install -D -m 0755 helper/oss-helper \

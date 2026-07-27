@@ -1,0 +1,61 @@
+.TH OSS 1 "July 2026" "oss 0.1.0" "User Commands"
+.SH NAME
+oss \- pick Linux hardening settings, review the diff, apply once
+.SH SYNOPSIS
+.B oss
+.SH DESCRIPTION
+.B oss
+opens a GTK4 window listing hardening settings for the running system, grouped
+into sections that each correspond to one configuration file. Settings are
+staged without privilege; nothing is written until you review the resulting
+file diff and confirm.
+.PP
+Applying asks for authentication once, through polkit, and hands the staged
+selection to a privileged helper at
+.IR /usr/libexec/oss\-helper .
+The helper re\-renders every target file from its own copy of the catalogue and
+accepts only setting identifiers and values, each checked against that
+catalogue's allowlist.
+.PP
+Changes are made as a single transaction. Every file touched is backed up
+first, candidate files are checked with the relevant validator where one exists
+.RB ( "sshd \-t" ", " "visudo \-c" ", " "auditctl \-R" ),
+and any failure rolls the whole set back. After applying, each value is read
+back off the live system and reported as in effect, awaiting a reboot, or not
+taken.
+.SH OPTIONS
+.B oss
+takes no command line options. Everything is driven from the interface.
+.SH FILES
+.TP
+.I /usr/share/oss/catalogue
+Setting definitions, one TOML file per section.
+.TP
+.I /usr/share/oss/presets
+Shipped presets.
+.TP
+.I ~/.config/oss
+User settings and saved presets.
+.TP
+.I /var/lib/oss
+Root\-owned state: the apply log and the permission rollback journal.
+.TP
+.I /etc/*/99\-oss.*
+The drop\-in files this application writes. Deleting one and re\-running that
+section's reload command returns it to stock.
+.SH ENVIRONMENT
+.TP
+.B OSS_DATA
+Override the directory holding the catalogue, presets and themes.
+.TP
+.B OSS_ROOT
+Redirect all writes below this directory. Honoured only when not running as
+root, so it cannot be used to misdirect a privileged apply. Intended for tests.
+.SH EXIT STATUS
+Returns 0 on a clean exit.
+.SH BUGS
+Report at
+.UR https://github.com/jegly/OSS/issues
+.UE .
+.SH AUTHOR
+Jegly <jjjegly@gmail.com>

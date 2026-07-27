@@ -1,0 +1,82 @@
+# Maintainer: Jegly <jjjegly@gmail.com>
+#
+# Layout is deliberately identical to the .deb (tools/build-deb.sh) and the
+# .spec (packaging/rpm/oss.spec). tools/compare-packaging.sh checks the three
+# against each other — a file added to one and forgotten in the others is the
+# failure mode this app would otherwise ship silently.
+#
+# Note on /usr/libexec: Arch packaging convention prefers /usr/lib for helper
+# binaries, but the polkit action in data/polkit/com.jegly.OSS.policy pins
+# org.freedesktop.policykit.exec.path to one absolute path, and polkit matches
+# it literally. Diverging here would mean a per-distro policy file for no gain,
+# so every package installs the helper to the same place.
+
+pkgname=oss
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Pick hardening flags, review the diff, apply once — a GTK4 control centre for Linux hardening"
+arch=('any')
+url="https://github.com/jegly/OSS"
+license=('Apache-2.0')
+depends=(
+  'python>=3.11'
+  'python-gobject'
+  'gtk4'
+  'libadwaita'
+  'polkit'
+  'fontconfig'
+)
+optdepends=(
+  'ufw: firewall section'
+  'audit: auditd rules section'
+  'usbguard: USB device policy section'
+  'apparmor: AppArmor profile section'
+  'openssh: sshd_config section'
+  'aide: tier 2 integrity baseline'
+)
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+check() {
+  cd "$srcdir/$pkgname-$pkgver"
+  # Skips the GTK tests automatically when there is no display, which is the
+  # normal case in a clean chroot. See tests/test_cards.py.
+  python3 -m unittest discover -s tests
+}
+
+package() {
+  cd "$srcdir/$pkgname-$pkgver"
+
+  install -d "$pkgdir/usr/share/oss"
+  cp -r src/ossgui "$pkgdir/usr/share/oss/"
+  find "$pkgdir" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
+
+  install -Dm755 oss "$pkgdir/usr/bin/oss"
+  install -Dm755 helper/oss-helper "$pkgdir/usr/libexec/oss-helper"
+
+  install -Dm644 data/polkit/com.jegly.OSS.policy \
+    "$pkgdir/usr/share/polkit-1/actions/com.jegly.OSS.policy"
+  install -Dm644 data/desktop/com.jegly.OSS.desktop \
+    "$pkgdir/usr/share/applications/com.jegly.OSS.desktop"
+
+  install -d "$pkgdir/usr/share/oss"
+  cp -r data/catalogue data/presets data/themes "$pkgdir/usr/share/oss/"
+
+  # The typefaces are part of the app, not a separate thing to install.
+  install -d "$pkgdir/usr/share/fonts/oss"
+  install -m644 data/fonts/*.ttf "$pkgdir/usr/share/fonts/oss/"
+
+  install -d "$pkgdir/usr/share/icons"
+  cp -r data/icons/hicolor "$pkgdir/usr/share/icons/"
+
+  install -Dm644 docs/oss.1 "$pkgdir/usr/share/man/man1/oss.1"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+  # Everything shipped is world-readable data or an explicitly-moded binary;
+  # cp -r carries the source tree's modes, so normalise rather than trust them.
+  find "$pkgdir/usr/share/oss" -type f -exec chmod 644 {} +
+  find "$pkgdir/usr/share/oss" -type d -exec chmod 755 {} +
+  chmod 755 "$pkgdir/usr/share/oss/ossgui" -R 2>/dev/null || true
+  find "$pkgdir/usr/share/oss/ossgui" -type f -exec chmod 644 {} +
+}

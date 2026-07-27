@@ -1,7 +1,7 @@
 Source: oss
 Section: admin
 Priority: optional
-Maintainer: OSS <noreply@localhost>
+Maintainer: Jegly <jjjegly@gmail.com>
 Build-Depends: debhelper-compat (= 13), python3
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
@@ -13,7 +13,7 @@ Depends: ${misc:Depends},
          python3-gi,
          gir1.2-gtk-4.0,
          gir1.2-adw-1,
-         policykit-1 | polkitd,
+         polkitd | policykit-1,
          fontconfig
 Recommends: ufw
 Suggests: auditd, usbguard, debsums, apparmor-utils, openssh-server

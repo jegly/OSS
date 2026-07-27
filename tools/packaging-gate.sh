@@ -52,7 +52,7 @@ for path in \
     ./usr/share/applications/com.jegly.OSS.desktop \
     ./usr/share/oss/catalogue/10-sysctl.toml \
     ./usr/share/oss/themes/ptyxis.toml \
-    ./usr/lib/oss/ossgui/apply.py
+    ./usr/share/oss/ossgui/apply.py
 do
     echo "$contents" | grep -q " $path\$"
     check $? "$path"
@@ -88,7 +88,7 @@ echo
 echo "The installed tree works:"
 STAGE=build/oss
 if OSS_DATA="$STAGE/usr/share/oss" \
-   PYTHONPATH="$STAGE/usr/lib/oss" \
+   PYTHONPATH="$STAGE/usr/share/oss" \
    python3 - <<'PY'
 import sys
 from ossgui import catalogue, presets, probe, render

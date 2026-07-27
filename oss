@@ -4,7 +4,7 @@
 import sys
 
 # Installed layout; harmless in the dev tree where the package is found first.
-sys.path.insert(0, "/usr/lib/oss")
+sys.path.insert(0, "/usr/share/oss")
 
 import gi
 
