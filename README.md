@@ -8,7 +8,7 @@
 
 <br>
 
-**Linux hardening in a window. See the diff. Apply once. Roll back if it breaks.**
+**The missing GUI for security-related stuff on Linux that your distro forgot to ship.**
 
 <br>
 
