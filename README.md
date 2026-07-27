@@ -19,7 +19,7 @@
 ![Settings](https://img.shields.io/badge/settings-614-success?style=flat-square)
 ![Tests](https://img.shields.io/badge/tests-168%20passing-brightgreen?style=flat-square)
 ![Packages](https://img.shields.io/badge/packages-deb%20%7C%20rpm%20%7C%20pkgbuild-orange?style=flat-square)
-![Offline](https://img.shields.io/badge/network-never-critical?style=flat-square)
+
 
 </div>
 
