@@ -253,14 +253,6 @@ Terminal palettes were designed for terminal text, and a fair few fall well unde
 
 ---
 
-## Known limits
-
-- **Not yet installed on a fresh offline VM.** That's the whole install promise, and `tools/packaging-gate.sh` says plainly it can't stand in for the real thing.
-- **Not yet applied to a live machine at full scale.** `fstab`, SUID stripping, USBGuard, faillock and `kernel.modules_disabled` each lock you out in their own distinct way. Use a VM snapshot.
-- **`sysctl --system` reads `/etc/sysctl.conf` after `/etc/sysctl.d`**, so a key set in both gets written by this app and then immediately overridden. Boot is different — `systemd-sysctl` doesn't read that file at all — so such a setting appears to fail on Apply and then starts working after a reboot. The app spots this and names the keys; it won't edit your `/etc/sysctl.conf` for you.
-- **Immutable distributions** — Silverblue, Kinoite, MicroOS, SteamOS — aren't supported. `/etc` is writable there so most drop-ins would be fine, but the helper can't be installed into a read-only `/usr` without `rpm-ostree` layering and a reboot.
-- **`recommended` is generated, not curated.** It is by definition every setting rated `safe`, which is 427 of them. That's a defensible way to stop presets drifting from the catalogue and a poor way to make a recommendation. Treat it as "everything safe", not as advice.
-
 ---
 
 ## Licence
@@ -272,7 +264,7 @@ Terminal palettes were designed for terminal text, and a fair few fall well unde
 </div>
 
 Licensed under the Apache License, Version 2.0 — see [LICENSE](LICENSE).
-Copyright 2026 the OSS authors.
+Copyright 2026 Jegly
 
 The bundled typefaces are under the SIL Open Font License 1.1; Cormorant Garamond is copyright 2015 The Cormorant Project Authors. Full breakdown in [`debian/copyright`](debian/copyright).
 
