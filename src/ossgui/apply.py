@@ -19,18 +19,21 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from . import accounts as accounts_module
 from . import apparmor as apparmor_module
 from . import bootloader as bootloader_module
 from . import filemode as filemode_module
 from . import fstab as fstab_module
 from . import permissions as permissions_module
-from . import probe, render, ufw as ufw_module, units as units_module
+from . import distro, probe, render, ufw as ufw_module, units as units_module
 from . import sandbox as sandbox_module
 from . import packages as packages_module
 from . import snapd as snapd_module
@@ -77,6 +80,22 @@ class Result:
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
+
+
+#: Prefix marking a progress line on stderr. stdout carries the JSON result and
+#: has to stay parseable, so progress goes to stderr one flushed line at a time.
+PROGRESS_PREFIX = "@@ "
+
+
+def progress(text: str) -> None:
+    """Tell the GUI what the transaction is doing right now.
+
+    The helper is a single subprocess that says nothing until it exits, so
+    without this the dialog can only spin — and a slow update-initramfs looks
+    exactly like a hang. Anything that can take more than a moment reports
+    before it starts, not after it finishes.
+    """
+    print(f"{PROGRESS_PREFIX}{text}", file=sys.stderr, flush=True)
 
 
 class ApplyError(Exception):
@@ -170,12 +189,7 @@ def backup(path: Path) -> Path | None:
 def write_atomic(path: Path, content: str, mode: int) -> None:
     """Write via a temp file in the same directory, then rename over the target."""
     _refuse_symlink(path)
-    if not path.parent.is_dir():
-        # Explicit mode rather than whatever umask pkexec handed us: a config
-        # directory created 0777 because of an odd inherited umask would be a
-        # hole opened by the tool that is supposed to close them.
-        path.parent.mkdir(parents=True, exist_ok=True)
-        os.chmod(path.parent, 0o755)
+    _ensure_parent(path)
     handle, temp_name = tempfile.mkstemp(dir=path.parent, prefix=".oss-")
     temp = Path(temp_name)
     try:
@@ -194,6 +208,11 @@ def write_atomic(path: Path, content: str, mode: int) -> None:
 
 def restore(path: Path) -> bool:
     """Put the .bak back. Returns False when there was nothing to restore."""
+    # Same rule as backup() and write_atomic(): a target that has become a
+    # symlink since the transaction started must not be written through, or the
+    # rollback becomes the write primitive the rest of this module refuses to
+    # offer.
+    _refuse_symlink(path)
     backup_path = path.with_name(path.name + BACKUP_SUFFIX)
     if not backup_path.exists():
         # No backup means the file did not exist before this transaction.
@@ -244,10 +263,25 @@ def validate_write(write: render.FileWrite, result: Result) -> None:
         _validate_auditd(write, result)
 
 
+def _ensure_parent(path: Path) -> None:
+    """Create a target's directory with an explicit mode.
+
+    Never the inherited umask: a directory pkexec's environment happened to
+    create 0777 would be a hole opened by the tool that exists to close them,
+    and ``/etc/sudoers.d`` is one of the directories this creates.
+    """
+    if not path.parent.is_dir():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        os.chmod(path.parent, 0o755)
+
+
 def _with_candidate(write: render.FileWrite):
     """Context: the candidate content in a temp file next to the real target."""
     path = target_path(write.path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    # Validation runs before any write, so this is usually what creates the
+    # directory — doing it without a mode here would leave write_atomic's own
+    # guard with nothing left to guard.
+    _ensure_parent(path)
     handle, name = tempfile.mkstemp(dir=path.parent, prefix=".oss-check-")
     with os.fdopen(handle, "w", encoding="utf-8") as stream:
         stream.write(write.content)
@@ -323,6 +357,7 @@ def apply_plan(
     snap_changes: dict[str, str] | None = None,
     package_removals: list[str] | None = None,
     package_purge: bool = False,
+    account_changes: list[tuple[list[str], str]] | None = None,
 ) -> Result:
     """Run the whole transaction, rolling back on any failure."""
     result = Result()
@@ -334,8 +369,13 @@ def apply_plan(
         return result
 
     touched: list[Path] = []
+    # Captured before anything changes: the rollback needs to know what each
+    # unit's enablement was *before* this transaction to undo a mask correctly,
+    # and after the fact that information is gone.
+    prior_units = probe.read_units() if any(c.mutates for c in plan.commands) else {}
     try:
         # 1. Validate every candidate before anything is written.
+        progress(f"Checking {len(plan.writes)} file(s) before writing anything")
         for write in plan.writes:
             # A drop-in whose directory nothing includes is a file that gets
             # silently ignored. Better to fail loudly than to report success.
@@ -348,7 +388,8 @@ def apply_plan(
             validate_write(write, result)
 
         # 2. Back up, then write.
-        for write in plan.writes:
+        for index, write in enumerate(plan.writes, 1):
+            progress(f"Writing {write.path}  ({index} of {len(plan.writes)})")
             path = target_path(write.path)
             if backup(path) is not None:
                 result.steps.append(Step("backup", f"{write.path} -> {write.path}{BACKUP_SUFFIX}"))
@@ -365,7 +406,8 @@ def apply_plan(
                 result.steps.append(Step("remove", removal.path))
 
         # 3. Reload. An exit code here means the system rejected our work.
-        for command in plan.commands:
+        for index, command in enumerate(plan.commands, 1):
+            progress(f"{command.why or str(command)}  ({index} of {len(plan.commands)})")
             code, output = run(command.argv)
             ok = code == 0
             result.steps.append(Step("command", str(command), ok, output))
@@ -374,15 +416,15 @@ def apply_plan(
 
         extras = extras or {}
         if "sandbox" in extras:
-            apply_sandbox(extras["sandbox"], result)
+            apply_sandbox(extras["sandbox"], result, touched)
         if "permissions" in extras:
             apply_permissions(extras["permissions"], result)
         if "bootloader" in extras:
-            apply_bootloader(extras["bootloader"], result)
+            apply_bootloader(extras["bootloader"], result, touched)
         if "fstab" in extras:
-            apply_fstab(extras["fstab"], result)
+            apply_fstab(extras["fstab"], result, touched)
         if "usb" in extras:
-            apply_usb(extras["usb"], result)
+            apply_usb(extras["usb"], result, touched)
         if "filemode" in extras:
             apply_filemode(extras["filemode"], result)
 
@@ -397,6 +439,16 @@ def apply_plan(
             result.steps.append(Step("command", " ".join(argv), ok, output[-2000:]))
             if not ok:
                 raise ApplyError(f"{why} failed: {output[-400:]}")
+
+        # Account deletion goes right after packages: also not something a
+        # restored .bak can undo, so it waits until everything reversible has
+        # already succeeded.
+        for argv, why in accounts_module.plan_commands(account_changes or []):
+            code, output = run(argv)
+            ok = code == 0
+            result.steps.append(Step("command", " ".join(argv), ok, output))
+            if not ok:
+                raise ApplyError(f"{why} failed: {output}")
 
         # Snap interfaces: snapd applies these immediately, no reload needed.
         for argv, why in snapd_module.plan_commands(snap_changes or {}):
@@ -426,16 +478,17 @@ def apply_plan(
     except ApplyError as exc:
         result.ok = False
         result.error = str(exc)
-        result.rolled_back = _rollback(touched, plan, result)
+        result.rolled_back = _rollback(touched, plan, result, prior_units)
         return result
     except OSError as exc:
         result.ok = False
         result.error = f"{type(exc).__name__}: {exc}"
-        result.rolled_back = _rollback(touched, plan, result)
+        result.rolled_back = _rollback(touched, plan, result, prior_units)
         return result
 
     # 4. Read back. Invalid sysctl keys fail silently, so this is the only way to
     #    know whether what we wrote actually took (§8).
+    progress(f"Reading {len(selection)} setting(s) back off the live system")
     result.outcomes, result.needs_reboot = read_back(catalogue, selection)
     result.steps.append(
         Step("readback", f"{len(result.outcomes)} flags re-read", True)
@@ -443,20 +496,90 @@ def apply_plan(
     return result
 
 
-def _rollback(touched: list[Path], plan: Plan, result: Result) -> bool:
-    """Restore every file we changed and re-run the reloads over the old state."""
+def unit_inverse(argv: tuple[str, ...], prior: dict[str, str]) -> tuple[str, ...] | None:
+    """The command that puts a unit back the way *prior* says it was.
+
+    ``systemctl mask`` and ``disable`` have no file behind them for a rollback
+    to restore, and they are not self-inverse, so undoing them means issuing
+    the opposite command — but only as far as the unit's own starting state.
+    Blindly unmasking would *enable* something the user had masked themselves
+    long before this transaction, which is a worse outcome than the failure
+    being recovered from.
+    """
+    if len(argv) < 3 or argv[0] != "/usr/bin/systemctl":
+        return None
+    action, unit = argv[1], argv[-1]
+    was = prior.get(unit)
+    if was is None:
+        # Never seen in list-unit-files, so there is no prior state to restore
+        # and no safe assumption to make about one.
+        return None
+    if action == "mask":
+        if was == "masked":
+            return None
+        if was == "enabled":
+            return ("/usr/bin/systemctl", "unmask", unit)
+        return ("/usr/bin/systemctl", "unmask", unit)
+    if action == "disable":
+        if was == "enabled":
+            return ("/usr/bin/systemctl", "enable", unit)
+        return None
+    return None
+
+
+def _rollback(
+    touched: list[Path],
+    plan: Plan,
+    result: Result,
+    prior_units: dict[str, str] | None = None,
+) -> bool:
+    """Restore every file we changed and put the system back over the top.
+
+    Reloads are re-run, because that is how a restored (or deleted) drop-in
+    takes effect. Mutations are *not* — re-running ``systemctl mask --now``
+    would apply it again rather than undo it — and are inverted from the unit
+    state captured before the transaction started instead.
+    """
+    progress("Something failed — rolling the whole transaction back")
     restored = True
     for path in touched:
         try:
             restore(path)
             result.steps.append(Step("restore", str(path)))
-        except OSError as exc:
+        except (OSError, ApplyError) as exc:
+            # ApplyError as well as OSError: restore() refuses a target that has
+            # become a symlink, and letting that escape would abandon the
+            # remaining files mid-rollback — the one moment where finishing
+            # matters most.
             restored = False
             result.steps.append(Step("restore", str(path), False, str(exc)))
+
+    prior_units = prior_units or {}
     for command in plan.commands:
-        code, output = run(command.argv)
+        if not command.mutates:
+            code, output = run(command.argv)
+            result.steps.append(
+                Step("command", f"rollback: {command}", code == 0, output)
+            )
+            continue
+
+        inverse = unit_inverse(tuple(command.argv), prior_units)
+        if inverse is None:
+            result.steps.append(
+                Step(
+                    "command",
+                    f"rollback: nothing to undo for {command}",
+                    True,
+                    "already in this state before the transaction, or no "
+                    "recorded prior state to return to",
+                )
+            )
+            continue
+        code, output = run(inverse)
+        if code != 0:
+            restored = False
         result.steps.append(
-            Step("command", f"rollback: {command}", code == 0, output)
+            Step("command", f"rollback: {shlex.join(inverse)}", code == 0, output)
         )
     return restored
 
@@ -469,11 +592,23 @@ def read_back(
     outcomes: dict[str, str] = {}
     needs_reboot: list[str] = []
 
+    skip_cache: dict[str, str] = {}
     for flag_id, value in selection.items():
         flag = catalogue.get(flag_id)
         if flag is None:
             continue
         section = catalogue.section(flag.section)
+
+        # A section the plan skipped wrote nothing, so there is nothing to read
+        # back. Verifying it anyway found the value absent and called it "did
+        # not take", which reports a failure for something never attempted —
+        # on a desktop without openssh-server that is 26 phantom failures.
+        if section.id not in skip_cache:
+            skip_cache[section.id] = render.section_skip_reason(section)
+        if skip_cache[section.id]:
+            outcomes[flag_id] = "skipped"
+            continue
+
         state = probe.flag_state(section, flag, facts, value)
 
         if state.state is probe.State.APPLIED:
@@ -612,31 +747,38 @@ def integrity_verify() -> Result:
     return result
 
 
-def apply_sandbox(changes: dict[str, list[str]], result: Result) -> None:
+def apply_sandbox(
+    changes: dict[str, list[str]], result: Result, touched: list[Path] | None = None
+) -> None:
     """Write or remove per-unit drop-ins, then reload systemd (§4.12)."""
-    touched = False
+    touched = touched if touched is not None else []
+    changed = False
     for change in sandbox_module.plan_changes(changes):
         path = target_path(change.path)
         if change.removing:
             if path.exists():
                 backup(path)
                 path.unlink()
+                touched.append(path)
                 result.steps.append(Step("remove", change.path))
-                touched = True
+                changed = True
             continue
         backup(path)
         write_atomic(path, change.content, 0o644)
+        touched.append(path)
         result.steps.append(Step("write", change.path))
-        touched = True
+        changed = True
 
-    if touched:
+    if changed:
         code, output = run(["/usr/bin/systemctl", "daemon-reload"])
         result.steps.append(Step("command", "systemctl daemon-reload", code == 0, output))
         if code != 0:
             raise ApplyError(f"daemon-reload failed: {output}")
 
 
-def apply_bootloader(payload: dict, result: Result) -> None:
+def apply_bootloader(
+    payload: dict, result: Result, touched: list[Path] | None = None
+) -> None:
     """Install or remove the GRUB superuser password script (§4.23)."""
     path = target_path(bootloader_module.PASSWORD_SCRIPT)
     parsed = bootloader_module.from_payload(payload)
@@ -645,20 +787,25 @@ def apply_bootloader(payload: dict, result: Result) -> None:
         if path.exists():
             backup(path)
             path.unlink()
+            (touched if touched is not None else []).append(path)
             result.steps.append(Step("remove", bootloader_module.PASSWORD_SCRIPT))
         else:
             return
     else:
         username, digest = parsed
         backup(path)
+        (touched if touched is not None else []).append(path)
         # 0700: the file contains a password hash, and grub.d scripts are executed.
         write_atomic(path, bootloader_module.render_script(username, digest), 0o700)
         result.steps.append(Step("write", bootloader_module.PASSWORD_SCRIPT))
 
-    code, output = run(["/usr/sbin/update-grub"])
-    result.steps.append(Step("command", "update-grub", code == 0, output))
+    # Resolved per family: update-grub is a Debian wrapper that does not exist
+    # on Arch or Fedora. See ossgui.distro.
+    argv = distro.resolve_command(("/usr/sbin/update-grub",))
+    code, output = run(argv)
+    result.steps.append(Step("command", shlex.join(argv), code == 0, output))
     if code != 0:
-        raise ApplyError(f"update-grub failed: {output}")
+        raise ApplyError(f"{shlex.join(argv)} failed: {output}")
 
 
 def apply_permissions(changes: list, result: Result) -> None:
@@ -759,7 +906,9 @@ def apply_filemode(changes: list, result: Result) -> None:
             raise ApplyError(f"{why} failed: {output}")
 
 
-def apply_fstab(changes: dict[str, set[str]], result: Result) -> None:
+def apply_fstab(
+    changes: dict[str, set[str]], result: Result, touched: list[Path] | None = None
+) -> None:
     """Test every option set with a live remount before touching fstab (§4.10).
 
     This is the whole safety story for this section: an option combination the
@@ -788,21 +937,30 @@ def apply_fstab(changes: dict[str, set[str]], result: Result) -> None:
 
     backup(path)
     write_atomic(path, fstab_module.render_fstab(current, changes), 0o644)
+    # Registered for rollback: of everything this transaction writes, an fstab
+    # left in a half-applied state is the one that costs you the next boot.
+    (touched if touched is not None else []).append(path)
     result.steps.append(Step("write", fstab_module.FSTAB))
 
 
-def apply_usb(payload: dict, result: Result) -> None:
+def apply_usb(
+    payload: dict, result: Result, touched: list[Path] | None = None
+) -> None:
     """Write the USBGuard policy, and only then consider enabling it (§4.18)."""
     parsed = usb_module.from_payload(payload)
+
+    registry = touched if touched is not None else []
 
     rules_path = target_path(usb_module.RULES_PATH)
     backup(rules_path)
     write_atomic(rules_path, parsed["rules"], 0o600)
+    registry.append(rules_path)
     result.steps.append(Step("write", usb_module.RULES_PATH))
 
     config_path = target_path(usb_module.CONFIG_PATH)
     backup(config_path)
     write_atomic(config_path, usb_module.daemon_config(parsed["implicit"]), 0o600)
+    registry.append(config_path)
     result.steps.append(Step("write", usb_module.CONFIG_PATH))
 
     if parsed["enable"]:
@@ -938,6 +1096,13 @@ def run_payload(catalogue: Catalogue, payload: dict) -> Result:
         except apparmor_module.ApparmorError as exc:
             return Result(ok=False, error=f"bad apparmor payload: {exc}")
 
+    account_changes: list[tuple[list[str], str]] = []
+    if "accounts" in payload:
+        try:
+            account_changes = accounts_module.from_payload(payload["accounts"])
+        except accounts_module.AccountError as exc:
+            return Result(ok=False, error=f"refusing this account change: {exc}")
+
     sections = payload.get("sections")
     current = probe.read_target_files(catalogue)
     try:
@@ -953,10 +1118,11 @@ def run_payload(catalogue: Catalogue, payload: dict) -> Result:
         and not snap_changes
         and not package_removals
         and not extras
+        and not account_changes
     ):
         return Result(ok=True, error="", steps=[Step("write", "nothing to do", True)])
 
     return apply_plan(
         catalogue, plan, selection, wanted_firewall, unit_changes, apparmor_changes,
-        extras, snap_changes, package_removals, package_purge,
+        extras, snap_changes, package_removals, package_purge, account_changes,
     )
