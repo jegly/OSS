@@ -1,0 +1,17 @@
+#  User and group accounts — list, group membership, and deletion.
+#
+#  Not in the original BUILD_PLAN. Removing a package never removes the system
+#  account it created (Debian policy deliberately leaves this to the admin),
+#  so accounts accumulate forever unless something else cleans them up.
+#
+#  No flags: users and groups are discovered at runtime, so there is nothing
+#  to enumerate in a data file — same reasoning as the snap and AppArmor
+#  sections.
+
+[section]
+id      = "accounts"
+title   = "accounts"
+nav     = "Access"
+order   = 57
+syntax  = "special"
+desc    = "Every local user and group, who belongs to what, and a way to remove an account or drop a membership without the terminal. Deleting an account cannot be undone the way a config change can — the account running this application and anything with UID or GID 0 are refused outright; everything else is offered, with group memberships and login status shown before you confirm."
