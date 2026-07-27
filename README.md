@@ -57,9 +57,6 @@ There is **no AppImage, Flatpak or Snap**, and there will not be. See [Why no Ap
 
 OSS — Operating System Security — is a GTK4 app that puts Linux hardening settings in a window. You tick what you want, it shows you the exact diff of every file it is about to change, and applies the whole lot behind one password prompt.
 
-It installs on a machine that has never been online.
-
-> On the name: OSS also means Open Source Software, and Open Sound System, the Linux audio API that ALSA replaced. This app writes files called `99-oss.conf` into `/etc/modprobe.d`, where that can read as audio configuration. It isn't.
 
 ---
 
