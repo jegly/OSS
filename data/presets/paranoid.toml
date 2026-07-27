@@ -8,6 +8,10 @@ name = "paranoid"
 desc = "Everything on, including the irreversible flags. This WILL break snaps, Wi-Fi, Bluetooth, USB storage and virtualisation. Test in a VM snapshot before it goes anywhere near a machine you need."
 
 [[set]]
+id = "accept_local"
+value = "0"
+
+[[set]]
 id = "accept_redirects_all"
 value = "0"
 
@@ -52,6 +56,34 @@ id = "apparmor_restrict_userns_force"
 value = "1"
 
 [[set]]
+id = "apt_check_valid_until"
+value = "true"
+
+[[set]]
+id = "apt_max_valid_time"
+value = "86400"
+
+[[set]]
+id = "apt_no_downgrade_insecure"
+value = "false"
+
+[[set]]
+id = "apt_no_insecure_repos"
+value = "false"
+
+[[set]]
+id = "apt_no_recommends"
+value = "false"
+
+[[set]]
+id = "apt_no_redirect"
+value = "false"
+
+[[set]]
+id = "apt_no_suggests"
+value = "false"
+
+[[set]]
 id = "apt_periodic_autoclean"
 value = "7"
 
@@ -66,6 +98,14 @@ value = "1"
 [[set]]
 id = "apt_periodic_update"
 value = "1"
+
+[[set]]
+id = "apt_sandbox_user"
+value = "_apt"
+
+[[set]]
+id = "arp_accept"
+value = "0"
 
 [[set]]
 id = "arp_announce"
@@ -84,7 +124,15 @@ id = "audit_backlog_wait_time"
 value = "1"
 
 [[set]]
+id = "audit_bpf"
+value = "1"
+
+[[set]]
 id = "audit_buffer"
+value = "1"
+
+[[set]]
+id = "audit_cron"
 value = "1"
 
 [[set]]
@@ -104,11 +152,27 @@ id = "audit_immutable"
 value = "1"
 
 [[set]]
+id = "audit_kernel_params"
+value = "1"
+
+[[set]]
+id = "audit_limits"
+value = "1"
+
+[[set]]
+id = "audit_login_defs"
+value = "1"
+
+[[set]]
 id = "audit_logins"
 value = "1"
 
 [[set]]
 id = "audit_mac_policy"
+value = "1"
+
+[[set]]
+id = "audit_modprobe_config"
 value = "1"
 
 [[set]]
@@ -120,7 +184,19 @@ id = "audit_mounts"
 value = "1"
 
 [[set]]
+id = "audit_namespaces"
+value = "1"
+
+[[set]]
 id = "audit_network_env"
+value = "1"
+
+[[set]]
+id = "audit_own_config"
+value = "1"
+
+[[set]]
+id = "audit_pam_config"
 value = "1"
 
 [[set]]
@@ -136,12 +212,24 @@ id = "audit_privileged_exec"
 value = "1"
 
 [[set]]
+id = "audit_ptrace"
+value = "1"
+
+[[set]]
 id = "audit_sudoers"
+value = "1"
+
+[[set]]
+id = "audit_systemd_units"
 value = "1"
 
 [[set]]
 id = "audit_time_changes"
 value = "1"
+
+[[set]]
+id = "bc_forwarding"
+value = "0"
 
 [[set]]
 id = "binfmt_misc_off"
@@ -152,8 +240,20 @@ id = "bootp_relay"
 value = "0"
 
 [[set]]
+id = "bpf_jit_enable_off"
+value = "0"
+
+[[set]]
 id = "bpf_jit_harden"
 value = "2"
+
+[[set]]
+id = "bpf_jit_kallsyms"
+value = "0"
+
+[[set]]
+id = "bpf_stats_enabled"
+value = "0"
 
 [[set]]
 id = "conf_all_forwarding"
@@ -164,8 +264,24 @@ id = "core_pattern_false"
 value = "|/bin/false"
 
 [[set]]
+id = "core_pipe_limit"
+value = "0"
+
+[[set]]
 id = "core_uses_pid"
 value = "1"
+
+[[set]]
+id = "coredump_external_size_max"
+value = "0"
+
+[[set]]
+id = "coredump_journal_size_max"
+value = "0"
+
+[[set]]
+id = "coredump_max_use"
+value = "0"
 
 [[set]]
 id = "coredump_process_size_max"
@@ -216,6 +332,10 @@ id = "drop_gratuitous_arp"
 value = "1"
 
 [[set]]
+id = "drop_unicast_in_l2_multicast"
+value = "1"
+
+[[set]]
 id = "efi_disable_early_pci_dma"
 value = "disable_early_pci_dma"
 
@@ -240,6 +360,14 @@ id = "faillock_fail_interval"
 value = "900"
 
 [[set]]
+id = "faillock_local_users_only"
+value = ""
+
+[[set]]
+id = "faillock_nodelay"
+value = ""
+
+[[set]]
 id = "faillock_root_unlock_time"
 value = "60"
 
@@ -252,6 +380,14 @@ id = "faillock_unlock_time"
 value = "900"
 
 [[set]]
+id = "fb_tunnels_only_for_init_net"
+value = "1"
+
+[[set]]
+id = "ftrace_enabled"
+value = "0"
+
+[[set]]
 id = "gather_data_sampling"
 value = "force"
 
@@ -260,12 +396,44 @@ id = "gdm_disable_user_list"
 value = "true"
 
 [[set]]
+id = "gnome_automount"
+value = "false"
+
+[[set]]
+id = "gnome_automount_open"
+value = "false"
+
+[[set]]
+id = "gnome_autorun_never"
+value = "true"
+
+[[set]]
 id = "gnome_disable_camera"
+value = "true"
+
+[[set]]
+id = "gnome_disable_external_search"
 value = "true"
 
 [[set]]
 id = "gnome_disable_microphone"
 value = "true"
+
+[[set]]
+id = "gnome_hide_identity"
+value = "true"
+
+[[set]]
+id = "gnome_location_off"
+value = "false"
+
+[[set]]
+id = "gnome_no_lockscreen_banners"
+value = "false"
+
+[[set]]
+id = "gnome_old_files_age"
+value = "7"
 
 [[set]]
 id = "gnome_remember_recent_files"
@@ -288,6 +456,14 @@ id = "gnome_send_software_usage_stats"
 value = "false"
 
 [[set]]
+id = "gnome_usb_protection"
+value = "true"
+
+[[set]]
+id = "gnome_usb_protection_level"
+value = "always"
+
+[[set]]
 id = "grub_disable_os_prober"
 value = "true"
 
@@ -301,6 +477,18 @@ value = "20"
 
 [[set]]
 id = "grub_timeout_zero"
+value = "0"
+
+[[set]]
+id = "hardened_usercopy"
+value = "1"
+
+[[set]]
+id = "hardlockup_panic"
+value = "1"
+
+[[set]]
+id = "ia32_emulation_off"
 value = "0"
 
 [[set]]
@@ -332,6 +520,10 @@ id = "init_on_free"
 value = "1"
 
 [[set]]
+id = "inotify_max_user_instances"
+value = "128"
+
+[[set]]
 id = "inotify_max_user_watches"
 value = "65536"
 
@@ -344,8 +536,16 @@ id = "io_uring_disabled"
 value = "2"
 
 [[set]]
+id = "io_uring_group"
+value = "0"
+
+[[set]]
 id = "iommu_force"
 value = "force"
+
+[[set]]
+id = "iommu_forcedac"
+value = "1"
 
 [[set]]
 id = "iommu_passthrough"
@@ -356,12 +556,20 @@ id = "iommu_strict"
 value = "1"
 
 [[set]]
+id = "ip_default_ttl"
+value = "64"
+
+[[set]]
 id = "ip_forward"
 value = "0"
 
 [[set]]
 id = "ip_local_port_range"
 value = "32768 60999"
+
+[[set]]
+id = "ip_unprivileged_port_start"
+value = "1024"
 
 [[set]]
 id = "ipv6_accept_ra"
@@ -374,6 +582,14 @@ value = "0"
 [[set]]
 id = "ipv6_accept_ra_defrtr"
 value = "0"
+
+[[set]]
+id = "ipv6_accept_ra_from_local"
+value = "0"
+
+[[set]]
+id = "ipv6_accept_ra_min_hop_limit"
+value = "64"
 
 [[set]]
 id = "ipv6_accept_ra_pinfo"
@@ -400,6 +616,10 @@ id = "ipv6_accept_source_route_default"
 value = "-1"
 
 [[set]]
+id = "ipv6_accept_untracked_na"
+value = "0"
+
+[[set]]
 id = "ipv6_autoconf"
 value = "0"
 
@@ -408,8 +628,24 @@ id = "ipv6_disable_boot"
 value = "1"
 
 [[set]]
+id = "ipv6_drop_unicast_in_l2_multicast"
+value = "1"
+
+[[set]]
+id = "ipv6_drop_unsolicited_na"
+value = "1"
+
+[[set]]
+id = "ipv6_forwarding"
+value = "0"
+
+[[set]]
 id = "ipv6_max_addresses"
 value = "1"
+
+[[set]]
+id = "ipv6_mc_forwarding"
+value = "0"
 
 [[set]]
 id = "ipv6_router_solicitations"
@@ -444,8 +680,16 @@ id = "journal_forward_to_syslog"
 value = "no"
 
 [[set]]
+id = "journal_max_file_sec"
+value = "1day"
+
+[[set]]
 id = "journal_max_level_store"
 value = "info"
+
+[[set]]
+id = "journal_max_level_wall"
+value = "emerg"
 
 [[set]]
 id = "journal_max_retention"
@@ -460,12 +704,28 @@ id = "journal_ratelimit_interval"
 value = "30s"
 
 [[set]]
+id = "journal_read_kmsg"
+value = "no"
+
+[[set]]
+id = "journal_runtime_max_use"
+value = "64M"
+
+[[set]]
 id = "journal_seal"
 value = "yes"
 
 [[set]]
+id = "journal_split_mode"
+value = "uid"
+
+[[set]]
 id = "journal_storage_persistent"
 value = "persistent"
+
+[[set]]
+id = "journal_sync_interval"
+value = "30s"
 
 [[set]]
 id = "journal_system_max_file_size"
@@ -512,12 +772,28 @@ id = "lock_enabled"
 value = "true"
 
 [[set]]
+id = "lock_on_suspend"
+value = "true"
+
+[[set]]
 id = "lockdown"
 value = "integrity"
 
 [[set]]
+id = "lockdown_command_line"
+value = "true"
+
+[[set]]
+id = "lockdown_print_setup"
+value = "true"
+
+[[set]]
 id = "log_martians"
 value = "1"
+
+[[set]]
+id = "logindefs_chfn_restrict"
+value = "rwh"
 
 [[set]]
 id = "logindefs_default_home"
@@ -526,6 +802,10 @@ value = "no"
 [[set]]
 id = "logindefs_encrypt_method"
 value = "YESCRYPT"
+
+[[set]]
+id = "logindefs_home_mode"
+value = "0750"
 
 [[set]]
 id = "logindefs_login_retries"
@@ -552,6 +832,14 @@ id = "logindefs_sha_crypt_min_rounds"
 value = "640000"
 
 [[set]]
+id = "logindefs_syslog_sg_enab"
+value = "yes"
+
+[[set]]
+id = "logindefs_syslog_su_enab"
+value = "yes"
+
+[[set]]
 id = "logindefs_umask"
 value = "077"
 
@@ -568,16 +856,52 @@ id = "lsm_stack"
 value = "lockdown,yama,apparmor,bpf"
 
 [[set]]
+id = "max_cgroup_namespaces"
+value = "0"
+
+[[set]]
+id = "max_ipc_namespaces"
+value = "0"
+
+[[set]]
 id = "max_map_count"
 value = "1048576"
+
+[[set]]
+id = "max_mnt_namespaces"
+value = "0"
+
+[[set]]
+id = "max_net_namespaces"
+value = "0"
+
+[[set]]
+id = "max_pid_namespaces"
+value = "0"
+
+[[set]]
+id = "max_time_namespaces"
+value = "0"
 
 [[set]]
 id = "max_user_namespaces"
 value = "0"
 
 [[set]]
+id = "max_uts_namespaces"
+value = "0"
+
+[[set]]
+id = "mc_forwarding_v4"
+value = "0"
+
+[[set]]
 id = "mds"
 value = "full,nosmt"
+
+[[set]]
+id = "memfd_noexec"
+value = "2"
 
 [[set]]
 id = "mitigations"
@@ -1288,6 +1612,22 @@ id = "modules_disabled"
 value = "1"
 
 [[set]]
+id = "mount_max"
+value = "10000"
+
+[[set]]
+id = "netdev_max_backlog"
+value = "16384"
+
+[[set]]
+id = "nm_addr_gen_mode"
+value = "stable-privacy"
+
+[[set]]
+id = "nm_dns_over_tls"
+value = "opportunistic"
+
+[[set]]
 id = "nm_ethernet_cloned_mac"
 value = "stable"
 
@@ -1302,6 +1642,14 @@ value = "0"
 [[set]]
 id = "nm_mdns"
 value = "0"
+
+[[set]]
+id = "nm_no_dhcp_hostname_v4"
+value = "false"
+
+[[set]]
+id = "nm_no_dhcp_hostname_v6"
+value = "false"
 
 [[set]]
 id = "nm_scan_rand_mac"
@@ -1340,11 +1688,19 @@ id = "page_poison"
 value = "1"
 
 [[set]]
+id = "panic_on_io_nmi"
+value = "1"
+
+[[set]]
 id = "panic_on_oom"
 value = "0"
 
 [[set]]
 id = "panic_on_oops"
+value = "1"
+
+[[set]]
+id = "panic_on_unrecovered_nmi"
 value = "1"
 
 [[set]]
@@ -1424,8 +1780,16 @@ id = "pw_enforcing"
 value = "1"
 
 [[set]]
+id = "pw_gecoscheck"
+value = "1"
+
+[[set]]
 id = "pw_lcredit"
 value = "-1"
+
+[[set]]
+id = "pw_maxclassrepeat"
+value = "4"
 
 [[set]]
 id = "pw_maxrepeat"
@@ -1460,6 +1824,10 @@ id = "pw_usercheck"
 value = "1"
 
 [[set]]
+id = "pw_usersubstr"
+value = "4"
+
+[[set]]
 id = "random_trust_bootloader_off"
 value = "off"
 
@@ -1484,6 +1852,10 @@ id = "resolved_cache"
 value = "no-negative"
 
 [[set]]
+id = "resolved_cache_from_localhost"
+value = "no"
+
+[[set]]
 id = "resolved_dns_over_tls"
 value = "yes"
 
@@ -1504,12 +1876,24 @@ id = "resolved_multicast_dns"
 value = "no"
 
 [[set]]
+id = "resolved_read_etc_hosts"
+value = "yes"
+
+[[set]]
+id = "resolved_refuse_record_types"
+value = "ANY"
+
+[[set]]
 id = "resolved_single_label"
 value = "no"
 
 [[set]]
 id = "retbleed"
 value = "auto,nosmt"
+
+[[set]]
+id = "route_localnet"
+value = "0"
 
 [[set]]
 id = "rp_filter_all"
@@ -1552,11 +1936,19 @@ id = "slab_nomerge"
 value = ""
 
 [[set]]
+id = "somaxconn"
+value = "4096"
+
+[[set]]
 id = "spec_rstack_overflow"
 value = "safe-ret"
 
 [[set]]
 id = "spec_store_bypass_disable"
+value = "on"
+
+[[set]]
+id = "spectre_bhi"
 value = "on"
 
 [[set]]
@@ -1568,6 +1960,10 @@ id = "spectre_v2_user"
 value = "on"
 
 [[set]]
+id = "split_lock_mitigate"
+value = "1"
+
+[[set]]
 id = "srbds"
 value = "on"
 
@@ -1577,6 +1973,10 @@ value = "force-on"
 
 [[set]]
 id = "ssh_allow_agent_forwarding"
+value = "no"
+
+[[set]]
+id = "ssh_allow_stream_local_forwarding"
 value = "no"
 
 [[set]]
@@ -1609,6 +2009,14 @@ value = "300"
 
 [[set]]
 id = "ssh_compression"
+value = "no"
+
+[[set]]
+id = "ssh_disable_forwarding"
+value = "yes"
+
+[[set]]
+id = "ssh_expose_auth_info"
 value = "no"
 
 [[set]]
@@ -1680,12 +2088,28 @@ id = "ssh_permit_user_environment"
 value = "no"
 
 [[set]]
+id = "ssh_pubkey_accepted_algorithms"
+value = "ssh-ed25519,sk-ssh-ed25519@openssh.com"
+
+[[set]]
 id = "ssh_pubkey_authentication"
 value = "yes"
 
 [[set]]
+id = "ssh_required_rsa_size"
+value = "3072"
+
+[[set]]
 id = "ssh_strict_modes"
 value = "yes"
+
+[[set]]
+id = "ssh_tcp_keepalive"
+value = "no"
+
+[[set]]
+id = "ssh_use_dns"
+value = "no"
 
 [[set]]
 id = "ssh_use_pam"
@@ -1701,6 +2125,22 @@ value = ""
 
 [[set]]
 id = "sudo_env_reset"
+value = ""
+
+[[set]]
+id = "sudo_ignore_dot"
+value = ""
+
+[[set]]
+id = "sudo_lecture_always"
+value = "always"
+
+[[set]]
+id = "sudo_mail_badpass"
+value = ""
+
+[[set]]
+id = "sudo_no_pwfeedback"
 value = ""
 
 [[set]]
@@ -1724,6 +2164,10 @@ id = "sudo_secure_path"
 value = "\"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\""
 
 [[set]]
+id = "sudo_targetpw"
+value = ""
+
+[[set]]
 id = "sudo_timestamp_timeout"
 value = "0"
 
@@ -1736,11 +2180,23 @@ id = "sudo_use_pty"
 value = ""
 
 [[set]]
+id = "sudo_verifypw_always"
+value = "always"
+
+[[set]]
 id = "suid_dumpable"
 value = "0"
 
 [[set]]
+id = "svc_anacron"
+value = "disable"
+
+[[set]]
 id = "svc_apport"
+value = "mask"
+
+[[set]]
+id = "svc_apt_news"
 value = "mask"
 
 [[set]]
@@ -1752,6 +2208,10 @@ id = "svc_bluetooth"
 value = "mask"
 
 [[set]]
+id = "svc_colord"
+value = "disable"
+
+[[set]]
 id = "svc_cups"
 value = "disable"
 
@@ -1761,6 +2221,18 @@ value = "mask"
 
 [[set]]
 id = "svc_debug_shell"
+value = "mask"
+
+[[set]]
+id = "svc_esm_cache"
+value = "mask"
+
+[[set]]
+id = "svc_fwupd"
+value = "disable"
+
+[[set]]
+id = "svc_geoclue"
 value = "mask"
 
 [[set]]
@@ -1800,12 +2272,28 @@ id = "svc_rsync"
 value = "mask"
 
 [[set]]
+id = "svc_rtkit"
+value = "disable"
+
+[[set]]
+id = "svc_saned"
+value = "mask"
+
+[[set]]
 id = "svc_smbd"
 value = "mask"
 
 [[set]]
 id = "svc_snapd"
 value = "disable"
+
+[[set]]
+id = "svc_speech_dispatcher"
+value = "disable"
+
+[[set]]
+id = "svc_spice_vdagent"
+value = "mask"
 
 [[set]]
 id = "svc_switcheroo_control"
@@ -1820,8 +2308,16 @@ id = "svc_wpa_supplicant"
 value = "disable"
 
 [[set]]
+id = "sysctl_writes_strict"
+value = "1"
+
+[[set]]
 id = "sysrq"
 value = "0"
+
+[[set]]
+id = "tcp_abort_on_overflow"
+value = "1"
 
 [[set]]
 id = "tcp_challenge_ack_limit"
@@ -1834,6 +2330,14 @@ value = "0"
 [[set]]
 id = "tcp_fack"
 value = "0"
+
+[[set]]
+id = "tcp_fastopen_off"
+value = "0"
+
+[[set]]
+id = "tcp_max_orphans"
+value = "16384"
 
 [[set]]
 id = "tcp_max_syn_backlog"
@@ -1862,6 +2366,10 @@ value = "1"
 [[set]]
 id = "tcp_timestamps"
 value = "0"
+
+[[set]]
+id = "threads_max"
+value = "16384"
 
 [[set]]
 id = "tsx_async_abort"
@@ -1906,6 +2414,10 @@ value = "1"
 [[set]]
 id = "unprivileged_userns_clone"
 value = "0"
+
+[[set]]
+id = "verity_require_signatures"
+value = "1"
 
 [[set]]
 id = "vsyscall_none"

@@ -391,3 +391,126 @@ desc    = "Stops umask being relaxed for groups"
 why     = "With user-private groups, tools quietly widen your umask to 002"
 risk    = "caution"
 breaks  = "Group-write workflows that rely on per-user groups"
+
+# --------------------------------------------------------------------------- #
+#  more password quality
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "pw_gecoscheck"
+group   = "pam / password quality"
+key     = "gecoscheck"
+value   = "1"
+default = "0"
+title   = "Not your real name"
+desc    = "Rejects passwords from your GECOS field"
+why     = "Your full name is in /etc/passwd, so it is the second guess after your username"
+risk    = "safe"
+
+[[flag]]
+id      = "pw_usersubstr"
+group   = "pam / password quality"
+key     = "usersubstr"
+value   = "4"
+default = "0"
+title   = "No username fragments"
+desc    = "Rejects 4-character runs of your username"
+why     = "usercheck only catches the whole name; this catches padding it"
+risk    = "safe"
+
+[[flag]]
+id      = "pw_maxclassrepeat"
+group   = "pam / password quality"
+key     = "maxclassrepeat"
+value   = "4"
+default = "0"
+title   = "Mix character classes"
+desc    = "No long runs from one class"
+why     = "Stops a long all-lowercase password passing the length rule alone"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  more lockout
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id       = "faillock_nodelay"
+group    = "pam / lockout"
+key      = "nodelay"
+value    = ""
+target   = "/etc/security/faillock.conf"
+in_place = true
+title    = "No artificial delay"
+desc     = "Fails fast instead of pausing"
+why      = "The delay after a bad password is a denial-of-service lever: it holds an auth slot open"
+help     = "Counter-intuitive, but the lockout counter is what actually stops guessing. The delay mostly ties up resources."
+risk     = "caution"
+
+[[flag]]
+id       = "faillock_local_users_only"
+group    = "pam / lockout"
+key      = "local_users_only"
+value    = ""
+target   = "/etc/security/faillock.conf"
+in_place = true
+title    = "Only track local users"
+desc     = "Ignores accounts from LDAP or AD"
+why      = "Without this a directory-wide account can be locked out from one machine"
+risk     = "safe"
+
+# --------------------------------------------------------------------------- #
+#  more login defaults
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "logindefs_home_mode"
+group   = "pam / login defaults"
+key     = "HOME_MODE"
+value   = "0750"
+default = "0755"
+target  = "/etc/login.defs"
+syntax  = "logindefs"
+title   = "Private home directories"
+desc    = "New homes are not world-readable"
+why     = "0755 lets every local user browse a new user's files from the moment the account exists"
+risk    = "safe"
+breaks  = "Shared access between local users"
+
+[[flag]]
+id      = "logindefs_chfn_restrict"
+group   = "pam / login defaults"
+key     = "CHFN_RESTRICT"
+value   = "rwh"
+default = "rwh"
+title   = "Limit what chfn can change"
+desc    = "Restricts the editable GECOS fields"
+why     = "Free-form GECOS text ends up in mail headers and finger output"
+target  = "/etc/login.defs"
+syntax  = "logindefs"
+risk    = "safe"
+
+[[flag]]
+id      = "logindefs_syslog_su_enab"
+group   = "pam / login defaults"
+key     = "SYSLOG_SU_ENAB"
+value   = "yes"
+default = "yes"
+target  = "/etc/login.defs"
+syntax  = "logindefs"
+title   = "Log every su"
+desc    = "Records su attempts to syslog"
+why     = "su is how a session changes identity, so it belongs in the log"
+risk    = "safe"
+
+[[flag]]
+id      = "logindefs_syslog_sg_enab"
+group   = "pam / login defaults"
+key     = "SYSLOG_SG_ENAB"
+value   = "yes"
+default = "yes"
+target  = "/etc/login.defs"
+syntax  = "logindefs"
+title   = "Log every sg"
+desc    = "Records group switches"
+why     = "Same reasoning for group identity"
+risk    = "safe"

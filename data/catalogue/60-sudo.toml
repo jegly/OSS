@@ -168,3 +168,79 @@ title   = "Tighter umask"
 desc    = "Root-created files aren't world-readable"
 why     = "Files root writes on your behalf shouldn't be readable by everyone"
 risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  more defaults — every one below was checked against sudo-rs with visudo -c,
+#  because sudo-rs silently supports a much smaller set than GNU sudo
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "sudo_no_pwfeedback"
+group   = "sudo / password prompt"
+key     = "!pwfeedback"
+value   = ""
+default = "off"
+title   = "No asterisks while typing"
+desc    = "Password prompt shows nothing"
+why     = "Feedback characters leak your password length to anyone watching the screen"
+help    = "pwfeedback has also had its own buffer-overflow bug (CVE-2019-18634). Off is both the safer and the default behaviour."
+risk    = "safe"
+
+[[flag]]
+id      = "sudo_verifypw_always"
+group   = "sudo / password prompt"
+key     = "verifypw"
+value   = "always"
+default = "all"
+title   = "Always verify the password"
+desc    = "No shortcuts for -v"
+why     = "Stops `sudo -v` refreshing your timestamp without actually proving who you are"
+risk    = "safe"
+
+[[flag]]
+id      = "sudo_lecture_always"
+group   = "sudo / password prompt"
+key     = "lecture"
+value   = "always"
+default = "once"
+title   = "Show the warning every time"
+desc    = "Reminds you before each session"
+why     = "Small thing, but it makes an unexpected sudo prompt visible instead of routine"
+risk    = "safe"
+breaks  = "Extra output before each sudo password prompt"
+
+[[flag]]
+id      = "sudo_mail_badpass"
+group   = "sudo / logging"
+key     = "mail_badpass"
+value   = ""
+default = "off"
+title   = "Mail failed attempts"
+desc    = "Sends root mail on a bad password"
+why     = "Somebody guessing at sudo on your machine is worth knowing about"
+help    = "Only useful if local mail delivery works. Without an MTA the mail is written nowhere and this does nothing."
+risk    = "safe"
+
+[[flag]]
+id      = "sudo_ignore_dot"
+group   = "sudo / environment"
+key     = "ignore_dot"
+value   = ""
+default = "on"
+title   = "Ignore '.' in PATH"
+desc    = "Won't run from the current directory"
+why     = "A '.' in PATH means a file named `ls` in whatever folder you are in runs as root"
+risk    = "safe"
+
+[[flag]]
+id      = "sudo_targetpw"
+group   = "sudo / password prompt"
+key     = "targetpw"
+value   = ""
+default = "off"
+title   = "Ask for the target's password"
+desc    = "Your own password stops working"
+why     = "Running as another user should need that user's password, not yours"
+help    = "Read the breaks line twice. With this on, `sudo` needs root's password — and Ubuntu locks the root account by default, so there may not be one. Set a root password first or you lose sudo entirely."
+risk    = "breaking"
+breaks  = "sudo, unless the target account has a usable password"

@@ -271,3 +271,158 @@ title   = "Privileged command use"
 desc    = "sudo, su, pkexec, passwd, useradd"
 why     = "Covers every normal route to elevated privilege"
 risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  more watch groups — syscall numbers and paths verified against this kernel
+#  and filesystem before being added; the ssh one is gated behind a real check
+#  rather than assumed, since openssh-server is not always installed
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "audit_kernel_params"
+group   = "auditd / watches"
+key     = "-w /etc/sysctl.conf -p wa -k sysctl"
+value   = "1"
+default = "0"
+extra   = ["-w /etc/sysctl.d/ -p wa -k sysctl"]
+title   = "sysctl config changes"
+desc    = "Edits to sysctl.conf and sysctl.d"
+why     = "This is the same file this app writes to — knowing when it changes outside the app is worth having"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_ssh_config"
+group   = "auditd / watches"
+key     = "-w /etc/ssh/sshd_config -p wa -k sshd"
+value   = "1"
+default = "0"
+extra   = ["-w /etc/ssh/sshd_config.d/ -p wa -k sshd"]
+needs   = ["path:/etc/ssh/sshd_config"]
+title   = "sshd config changes"
+desc    = "Edits to the SSH server config"
+why     = "sshd_config is the single file that decides whether the network can reach a shell"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_pam_config"
+group   = "auditd / watches"
+key     = "-w /etc/pam.d/ -p wa -k pam"
+value   = "1"
+default = "0"
+title   = "PAM config changes"
+desc    = "Edits to the PAM stack"
+why     = "A single added line in a PAM file can add a silent authentication bypass"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_cron"
+group   = "auditd / watches"
+key     = "-w /etc/crontab -p wa -k cron"
+value   = "1"
+default = "0"
+extra   = [
+  "-w /etc/cron.d/ -p wa -k cron",
+  "-w /etc/cron.daily/ -p wa -k cron",
+  "-w /etc/cron.hourly/ -p wa -k cron",
+  "-w /etc/cron.monthly/ -p wa -k cron",
+  "-w /etc/cron.weekly/ -p wa -k cron",
+  "-w /var/spool/cron/crontabs/ -p wa -k cron",
+]
+title   = "Scheduled task changes"
+desc    = "Edits to cron and its spool"
+why     = "A cron entry is quiet, scheduled persistence — it runs again on its own with no further action"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_systemd_units"
+group   = "auditd / watches"
+key     = "-w /etc/systemd/system/ -p wa -k systemd-units"
+value   = "1"
+default = "0"
+title   = "systemd unit changes"
+desc    = "Edits to installed and overridden units"
+why     = "A unit file is another way to get something running unattended, same idea as cron"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_modprobe_config"
+group   = "auditd / watches"
+key     = "-w /etc/modprobe.d/ -p wa -k modprobe-config"
+value   = "1"
+default = "0"
+title   = "modprobe config changes"
+desc    = "Edits to module options and blacklists"
+why     = "This is where this app's own module blacklist lives — worth knowing if something rewrites it"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_own_config"
+group   = "auditd / watches"
+key     = "-w /etc/audit/ -p wa -k auditconfig"
+value   = "1"
+default = "0"
+title   = "audit's own config"
+desc    = "Edits to /etc/audit/ itself"
+why     = "Rules can no longer be changed once -e 2 is set, but an attempt to is itself worth a log line — this rule has to load before -e 2 locks the file, so it belongs earlier and does"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_limits"
+group   = "auditd / watches"
+key     = "-w /etc/security/limits.conf -p wa -k security-limits"
+value   = "1"
+default = "0"
+extra   = ["-w /etc/security/limits.d/ -p wa -k security-limits"]
+title   = "Resource limit changes"
+desc    = "Edits to ulimit-style limits"
+why     = "Raising a core-dump or file-descriptor limit for one user is a quiet way to weaken the whole box"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_login_defs"
+group   = "auditd / watches"
+key     = "-w /etc/login.defs -p wa -k login-defs"
+value   = "1"
+default = "0"
+title   = "login.defs changes"
+desc    = "Edits to account-creation defaults"
+why     = "This is the file behind the password-aging and login-defaults section — watching it catches a change made outside the app"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_ptrace"
+group   = "auditd / watches"
+key     = "-a always,exit -F arch=b64 -S ptrace -F auid>=1000 -F auid!=4294967295 -k tracing"
+value   = "1"
+default = "0"
+extra   = ["-a always,exit -F arch=b32 -S ptrace -F auid>=1000 -F auid!=4294967295 -k tracing"]
+title   = "ptrace use"
+desc    = "Attaching a debugger to another process"
+why     = "ptrace is how a credential is read out of a running process's memory, and how process injection works"
+risk    = "caution"
+breaks  = "Noisy on a dev machine — debuggers and some sandboxes use ptrace constantly"
+
+[[flag]]
+id      = "audit_namespaces"
+group   = "auditd / watches"
+key     = "-a always,exit -F arch=b64 -S unshare,setns -F auid>=1000 -F auid!=4294967295 -k namespaces"
+value   = "1"
+default = "0"
+extra   = ["-a always,exit -F arch=b32 -S unshare,setns -F auid>=1000 -F auid!=4294967295 -k namespaces"]
+title   = "Namespace creation"
+desc    = "unshare and setns by users"
+why     = "A new user namespace is how an unprivileged process gets a root-like view of itself — the first step in a lot of container-escape and privilege-confusion bugs"
+risk    = "caution"
+breaks  = "Noisy wherever containers or sandboxes run — both use namespaces constantly"
+
+[[flag]]
+id      = "audit_bpf"
+group   = "auditd / watches"
+key     = "-a always,exit -F arch=b64 -S bpf -F auid>=1000 -F auid!=4294967295 -k bpf-use"
+value   = "1"
+default = "0"
+title   = "BPF program loads"
+desc    = "The bpf() syscall by users"
+why     = "A loaded BPF program can read kernel memory or filter packets — legitimate uses exist, but so do rootkits built entirely on it"
+risk    = "caution"
+breaks  = "Anything using eBPF for tracing or networking logs a line each time"

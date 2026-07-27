@@ -91,3 +91,131 @@ desc    = "Desktop-level mic switch"
 why     = "Same idea for audio capture"
 risk    = "caution"
 breaks  = "Voice calls and recording"
+
+# --------------------------------------------------------------------------- #
+#  removable media — autorun is the oldest USB attack there is
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "gnome_automount"
+group   = "telemetry / removable media"
+key     = "org.gnome.desktop.media-handling automount"
+value   = "false"
+default = "true"
+title   = "Don't auto-mount media"
+desc    = "Inserted media stays unmounted"
+why     = "Mounting runs filesystem-driver code against a disk a stranger formatted"
+help    = "The filesystem driver parses the volume before you have decided to trust it. Several exploits have been filesystem-image bugs reached exactly this way."
+risk    = "caution"
+breaks  = "USB sticks and SD cards need mounting by hand"
+
+[[flag]]
+id      = "gnome_automount_open"
+group   = "telemetry / removable media"
+key     = "org.gnome.desktop.media-handling automount-open"
+value   = "false"
+default = "true"
+title   = "Don't open media windows"
+desc    = "No file manager on insert"
+why     = "Opening a folder generates thumbnails, which parses whatever is in it"
+risk    = "safe"
+breaks  = "Inserted media no longer opens a window"
+
+[[flag]]
+id      = "gnome_autorun_never"
+group   = "telemetry / removable media"
+key     = "org.gnome.desktop.media-handling autorun-never"
+value   = "true"
+default = "true"
+title   = "Never autorun"
+desc    = "Ignores autorun files on media"
+why     = "Autorun on removable media is how a whole generation of malware spread"
+risk    = "safe"
+
+[[flag]]
+id      = "gnome_usb_protection"
+group   = "telemetry / removable media"
+key     = "org.gnome.desktop.privacy usb-protection"
+value   = "true"
+default = "true"
+title   = "Block new USB devices"
+desc    = "GNOME's own USBGuard integration"
+why     = "Stops a device plugged in while you are away from being accepted"
+help    = "GNOME talks to USBGuard for this. Without usbguard installed the setting is recorded but nothing enforces it — see the usb section."
+risk    = "safe"
+
+[[flag]]
+id      = "gnome_usb_protection_level"
+group   = "telemetry / removable media"
+key     = "org.gnome.desktop.privacy usb-protection-level"
+value   = "always"
+default = "lockscreen"
+values  = ["lockscreen", "always"]
+labels  = ["only while locked", "always"]
+title   = "When to block USB"
+desc    = "Locked screen only, or always"
+why     = "'Always' also covers a device plugged in while you are sitting there but distracted"
+risk    = "caution"
+breaks  = "New USB devices need explicit approval every time"
+
+# --------------------------------------------------------------------------- #
+#  more privacy
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "gnome_location_off"
+group   = "telemetry / gnome privacy"
+key     = "org.gnome.system.location enabled"
+value   = "false"
+default = "false"
+title   = "Disable location services"
+desc    = "No geolocation for apps"
+why     = "GNOME's location service resolves your position from nearby Wi-Fi networks"
+risk    = "safe"
+breaks  = "Automatic timezone, weather, and maps"
+
+[[flag]]
+id      = "gnome_disable_external_search"
+group   = "telemetry / gnome privacy"
+key     = "org.gnome.desktop.search-providers disable-external"
+value   = "true"
+default = "false"
+title   = "No external search providers"
+desc    = "Overview search stays local"
+why     = "Otherwise typing in the overview can reach out to installed online providers"
+risk    = "safe"
+breaks  = "Search results from apps that provide them"
+
+[[flag]]
+id      = "gnome_hide_identity"
+group   = "telemetry / gnome privacy"
+key     = "org.gnome.desktop.privacy hide-identity"
+value   = "true"
+default = "false"
+title   = "Hide your identity"
+desc    = "Keeps your name out of app requests"
+why     = "Applications otherwise get your real name for the asking"
+risk    = "safe"
+
+[[flag]]
+id      = "gnome_old_files_age"
+group   = "telemetry / local history"
+key     = "org.gnome.desktop.privacy old-files-age"
+value   = "7"
+default = "30"
+title   = "Purge after a week"
+desc    = "Age at which temp and trash go"
+why     = "Only matters with the purge settings on; 30 days is a long tail of deleted files"
+risk    = "safe"
+
+[[flag]]
+id      = "gnome_no_lockscreen_banners"
+group   = "telemetry / local history"
+key     = "org.gnome.desktop.notifications show-banners"
+value   = "false"
+default = "true"
+title   = "No notification banners"
+desc    = "Nothing pops up over your work"
+why     = "Banners show message contents to anyone looking at the screen"
+risk    = "caution"
+breaks  = "You stop seeing notifications as they arrive"

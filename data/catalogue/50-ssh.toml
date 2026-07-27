@@ -406,3 +406,102 @@ why     = "Not security by itself, but it removes almost all drive-by scanning"
 help    = "Change the value here, then remember to allow the new port in the firewall — the app cross-checks that at review time."
 risk    = "caution"
 breaks  = "Clients still connecting to the old port"
+
+# --------------------------------------------------------------------------- #
+#  more restrictions
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id       = "ssh_allow_groups"
+group    = "ssh / authentication"
+key      = "AllowGroups"
+value    = ""
+default  = ""
+editable = true
+pattern  = "[a-z_][a-z0-9_-]{0,31}( [a-z_][a-z0-9_-]{0,31})*"
+title    = "Allowed groups"
+desc     = "Group-based login allowlist"
+why      = "Easier to maintain than a user list — add someone to the group, not to sshd_config"
+risk     = "caution"
+breaks   = "Login for anyone outside the listed groups"
+
+[[flag]]
+id      = "ssh_disable_forwarding"
+group   = "ssh / forwarding"
+key     = "DisableForwarding"
+value   = "yes"
+default = "no"
+title   = "Disable all forwarding"
+desc    = "One switch for every tunnel type"
+why     = "Covers TCP, X11, agent, tun and Unix-socket forwarding in a single directive, so nothing is missed"
+risk    = "caution"
+breaks  = "Every kind of SSH tunnel"
+
+[[flag]]
+id      = "ssh_allow_stream_local_forwarding"
+group   = "ssh / forwarding"
+key     = "AllowStreamLocalForwarding"
+value   = "no"
+default = "yes"
+title   = "No Unix-socket forwarding"
+desc    = "Blocks forwarded local sockets"
+why     = "A forwarded Unix socket reaches services that never listen on the network at all"
+risk    = "safe"
+breaks  = "Forwarding a Docker or database socket over SSH"
+
+[[flag]]
+id      = "ssh_required_rsa_size"
+group   = "ssh / crypto"
+key     = "RequiredRSASize"
+value   = "3072"
+default = "1024"
+title   = "Minimum RSA key size"
+desc    = "Rejects short RSA keys"
+why     = "A 1024-bit RSA key is within reach of a well-funded attacker"
+risk    = "caution"
+breaks  = "Anyone still using a 2048-bit or smaller key"
+
+[[flag]]
+id      = "ssh_pubkey_accepted_algorithms"
+group   = "ssh / crypto"
+key     = "PubkeyAcceptedAlgorithms"
+value   = "ssh-ed25519,sk-ssh-ed25519@openssh.com"
+default = "(openssh default set)"
+title   = "Ed25519 keys only"
+desc    = "Refuses RSA and ECDSA client keys"
+why     = "One modern algorithm, and hardware keys, with no downgrade path"
+risk    = "breaking"
+breaks  = "Every client whose key is not Ed25519"
+
+[[flag]]
+id      = "ssh_use_dns"
+group   = "ssh / logging"
+key     = "UseDNS"
+value   = "no"
+default = "no"
+title   = "No reverse DNS on connect"
+desc    = "Skips looking up the client name"
+why     = "A reverse lookup makes login depend on DNS, and the answer is attacker-controlled"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_tcp_keepalive"
+group   = "ssh / limits"
+key     = "TCPKeepAlive"
+value   = "no"
+default = "yes"
+title   = "No TCP keepalives"
+desc    = "Relies on the SSH-level check instead"
+why     = "TCP keepalives are spoofable; ClientAliveInterval is inside the encrypted channel"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_expose_auth_info"
+group   = "ssh / logging"
+key     = "ExposeAuthInfo"
+value   = "no"
+default = "no"
+title   = "Don't expose auth details"
+desc    = "Keeps auth info out of the session"
+why     = "Otherwise the session environment carries how you authenticated, for anything in it to read"
+risk    = "safe"

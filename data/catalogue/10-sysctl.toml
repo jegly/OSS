@@ -1210,3 +1210,535 @@ title   = "Temporary addresses (new)"
 desc    = "Same, for interfaces added later"
 why     = "Privacy extensions only help if new interfaces get them too"
 risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  namespaces — hard limits on how many of each kind can exist
+# --------------------------------------------------------------------------- #
+#  user.max_user_namespaces above is the one that stops container escapes
+#  outright. These cap the rest. A limit of 0 means the kernel refuses to create
+#  that namespace type at all, which is stronger than any LSM mediation of it.
+
+[[flag]]
+id      = "max_net_namespaces"
+group   = "namespaces / apparmor"
+key     = "user.max_net_namespaces"
+value   = "0"
+default = "61515"
+title   = "No network namespaces"
+desc    = "Blocks private network stacks"
+why     = "A network namespace is how a process gets a network the firewall does not see"
+risk    = "breaking"
+breaks  = "Containers, Flatpak/Snap networking, systemd PrivateNetwork units"
+
+[[flag]]
+id      = "max_pid_namespaces"
+group   = "namespaces / apparmor"
+key     = "user.max_pid_namespaces"
+value   = "0"
+default = "61515"
+title   = "No PID namespaces"
+desc    = "Blocks separate process trees"
+why     = "PID namespaces hide processes from the view you are auditing"
+risk    = "breaking"
+breaks  = "Containers and anything using PrivateUsers or PrivatePIDs"
+
+[[flag]]
+id      = "max_mnt_namespaces"
+group   = "namespaces / apparmor"
+key     = "user.max_mnt_namespaces"
+value   = "0"
+default = "61515"
+title   = "No mount namespaces"
+desc    = "Blocks private mount tables"
+why     = "A private mount table is how a sandbox hides or replaces files from itself"
+risk    = "breaking"
+breaks  = "Snaps, Flatpak, containers, systemd ProtectSystem and PrivateTmp"
+
+[[flag]]
+id      = "max_ipc_namespaces"
+group   = "namespaces / apparmor"
+key     = "user.max_ipc_namespaces"
+value   = "0"
+default = "61515"
+title   = "No IPC namespaces"
+desc    = "Blocks private shared memory"
+why     = "Less namespace machinery reachable without privilege"
+risk    = "caution"
+breaks  = "Containers"
+
+[[flag]]
+id      = "max_uts_namespaces"
+group   = "namespaces / apparmor"
+key     = "user.max_uts_namespaces"
+value   = "0"
+default = "61515"
+title   = "No UTS namespaces"
+desc    = "Blocks per-process hostnames"
+why     = "Same reasoning; a process should not present a different hostname"
+risk    = "caution"
+breaks  = "Containers"
+
+[[flag]]
+id      = "max_cgroup_namespaces"
+group   = "namespaces / apparmor"
+key     = "user.max_cgroup_namespaces"
+value   = "0"
+default = "61515"
+title   = "No cgroup namespaces"
+desc    = "Blocks private cgroup views"
+why     = "A private cgroup view is used to escape resource limits"
+risk    = "caution"
+breaks  = "Containers"
+
+[[flag]]
+id      = "max_time_namespaces"
+group   = "namespaces / apparmor"
+key     = "user.max_time_namespaces"
+value   = "0"
+default = "61515"
+title   = "No time namespaces"
+desc    = "Blocks per-process clocks"
+why     = "A process with its own clock can make your log timestamps meaningless"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  more kernel / memory
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "memfd_noexec"
+group   = "kernel / memory"
+key     = "vm.memfd_noexec"
+value   = "2"
+default = "0"
+values  = ["0", "1", "2"]
+labels  = ["allowed", "warn and allow", "refuse executable memfds"]
+title   = "Block executable memfds"
+desc    = "No anonymous executable memory files"
+why     = "memfd_create plus exec is the standard way to run a payload that never touches disk"
+help    = "2 makes the kernel refuse memfd_create without MFD_NOEXEC_SEAL. It closes a fileless-execution route that leaves nothing for a file scanner to find."
+risk    = "caution"
+breaks  = "Some JITs and language runtimes that build code in memory"
+
+[[flag]]
+id      = "ftrace_enabled"
+group   = "kernel / memory"
+key     = "kernel.ftrace_enabled"
+value   = "0"
+default = "1"
+title   = "Disable ftrace"
+desc    = "Turns off kernel function tracing"
+why     = "ftrace can read and hook kernel internals, and is a rootkit's preferred tool"
+risk    = "caution"
+breaks  = "perf, bpftrace, and kernel debugging"
+
+[[flag]]
+id      = "split_lock_mitigate"
+group   = "kernel / memory"
+key     = "kernel.split_lock_mitigate"
+value   = "1"
+default = "1"
+title   = "Mitigate split locks"
+desc    = "Penalises bus-locking instructions"
+why     = "A split lock stalls every core at once — a one-instruction denial of service"
+risk    = "safe"
+
+[[flag]]
+id      = "io_uring_group"
+group   = "kernel / memory"
+key     = "kernel.io_uring_group"
+value   = "0"
+default = "-1"
+title   = "Restrict io_uring to a group"
+desc    = "Only gid 0 may use io_uring"
+why     = "A middle ground when disabling io_uring outright breaks something"
+help    = "Use this instead of io_uring_disabled when one service genuinely needs io_uring: put that service's group here."
+risk    = "caution"
+breaks  = "Unprivileged software built on io_uring"
+
+[[flag]]
+id      = "sysctl_writes_strict"
+group   = "kernel / memory"
+key     = "kernel.sysctl_writes_strict"
+value   = "1"
+default = "1"
+title   = "Strict sysctl writes"
+desc    = "Rejects malformed sysctl writes"
+why     = "Sloppy writes to /proc/sys have set the wrong value silently in the past"
+risk    = "safe"
+
+[[flag]]
+id      = "panic_on_unrecovered_nmi"
+group   = "kernel / memory"
+key     = "kernel.panic_on_unrecovered_nmi"
+value   = "1"
+default = "0"
+title   = "Panic on unrecovered NMI"
+desc    = "Halts on unrecoverable hardware faults"
+why     = "Continuing after memory corruption is how a fault becomes an exploit"
+risk    = "caution"
+breaks  = "Machine halts instead of limping on"
+
+[[flag]]
+id      = "panic_on_io_nmi"
+group   = "kernel / memory"
+key     = "kernel.panic_on_io_nmi"
+value   = "1"
+default = "0"
+title   = "Panic on I/O NMI"
+desc    = "Halts on an I/O-channel error"
+why     = "Same reasoning, for the I/O path"
+risk    = "caution"
+breaks  = "Machine halts on some hardware faults"
+
+[[flag]]
+id      = "hardlockup_panic"
+group   = "kernel / memory"
+key     = "kernel.hardlockup_panic"
+value   = "1"
+default = "0"
+title   = "Panic on hard lockup"
+desc    = "Halts a wedged CPU rather than waiting"
+why     = "A locked-up core often means the kernel is already in an inconsistent state"
+risk    = "caution"
+breaks  = "Reboots instead of recovering from a driver hang"
+
+[[flag]]
+id      = "threads_max"
+group   = "kernel / memory"
+key     = "kernel.threads-max"
+value   = "16384"
+default = "123031"
+title   = "Cap total threads"
+desc    = "Limits system-wide thread count"
+why     = "Bounds a fork bomb before it exhausts kernel memory"
+risk    = "caution"
+breaks  = "Very high-concurrency workloads"
+
+[[flag]]
+id      = "core_pipe_limit"
+group   = "kernel / memory"
+key     = "kernel.core_pipe_limit"
+value   = "0"
+default = "10"
+title   = "No parallel core handlers"
+desc    = "Stops concurrent core-dump piping"
+why     = "Parallel dump handlers are a race an attacker can use to read another process's core"
+risk    = "safe"
+
+[[flag]]
+id      = "bpf_stats_enabled"
+group   = "kernel / memory"
+key     = "kernel.bpf_stats_enabled"
+value   = "0"
+default = "0"
+title   = "No BPF statistics"
+desc    = "Keeps BPF timing data off"
+why     = "Per-program run times are a side channel and a fingerprint"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  more filesystem
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "mount_max"
+group   = "filesystem"
+key     = "fs.mount-max"
+value   = "10000"
+default = "100000"
+title   = "Cap mounts per namespace"
+desc    = "Limits how many mounts can exist"
+why     = "Mount-table explosion is a cheap local denial of service"
+risk    = "safe"
+
+[[flag]]
+id      = "verity_require_signatures"
+group   = "filesystem"
+key     = "fs.verity.require_signatures"
+value   = "1"
+default = "0"
+title   = "Require signed fs-verity"
+desc    = "Only signed verity files may be opened"
+why     = "Without this, fs-verity proves a file is unchanged but not that you trust it"
+risk    = "breaking"
+breaks  = "Any fs-verity file without a signature the kernel keyring accepts"
+
+[[flag]]
+id      = "inotify_max_user_instances"
+group   = "filesystem"
+key     = "user.max_inotify_instances"
+value   = "128"
+default = "128"
+title   = "inotify instance limit"
+desc    = "Caps watchers per user"
+why     = "Bounds what one user can pin in kernel memory"
+risk    = "safe"
+breaks  = "File indexers and IDEs on very large trees"
+
+# --------------------------------------------------------------------------- #
+#  more network / ipv4
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "route_localnet"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.route_localnet"
+value   = "0"
+default = "0"
+title   = "No routing of 127.0.0.0/8"
+desc    = "Loopback stays loopback"
+why     = "Routing 127/8 lets a remote packet reach a service that believes it is local-only"
+risk    = "safe"
+
+[[flag]]
+id      = "accept_local"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.accept_local"
+value   = "0"
+default = "0"
+title   = "Reject own-address packets"
+desc    = "Drops packets claiming a local source"
+why     = "A packet arriving with your own address as its source is forged"
+risk    = "safe"
+
+[[flag]]
+id      = "arp_accept"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.arp_accept"
+value   = "0"
+default = "0"
+title   = "No new ARP from gratuitous"
+desc    = "Won't learn hosts from unsolicited ARP"
+why     = "Learning from gratuitous ARP is how the cache gets poisoned"
+risk    = "safe"
+
+[[flag]]
+id      = "bc_forwarding"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.bc_forwarding"
+value   = "0"
+default = "0"
+title   = "No broadcast forwarding"
+desc    = "Won't forward directed broadcasts"
+why     = "Directed broadcast forwarding is the amplifier in a smurf attack"
+risk    = "safe"
+
+[[flag]]
+id      = "drop_unicast_in_l2_multicast"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.drop_unicast_in_l2_multicast"
+value   = "1"
+default = "0"
+title   = "Drop mismatched unicast"
+desc    = "Unicast inside a multicast frame"
+why     = "That combination only occurs when someone is crafting frames"
+risk    = "safe"
+
+[[flag]]
+id      = "mc_forwarding_v4"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.all.mc_forwarding"
+value   = "0"
+default = "0"
+title   = "No multicast forwarding"
+desc    = "This machine is not a multicast router"
+why     = "Forwarding multicast turns a host into a relay for traffic it should ignore"
+risk    = "safe"
+
+[[flag]]
+id      = "tcp_fastopen_off"
+group   = "network / tcp"
+key     = "net.ipv4.tcp_fastopen"
+value   = "0"
+default = "1"
+title   = "Disable TCP Fast Open"
+desc    = "No connection-resumption cookies"
+why     = "A TFO cookie is a stable identifier a server can use to recognise you across connections"
+risk    = "safe"
+breaks  = "A small latency gain on repeat connections"
+
+[[flag]]
+id      = "tcp_abort_on_overflow"
+group   = "network / tcp"
+key     = "net.ipv4.tcp_abort_on_overflow"
+value   = "1"
+default = "0"
+title   = "Reset on backlog overflow"
+desc    = "Refuses instead of silently dropping"
+why     = "A reset tells the client to back off; a silent drop makes it retry and worsen the flood"
+risk    = "caution"
+breaks  = "Legitimate clients see resets during a burst"
+
+[[flag]]
+id      = "tcp_max_orphans"
+group   = "network / tcp"
+key     = "net.ipv4.tcp_max_orphans"
+value   = "16384"
+default = "65536"
+title   = "Cap orphaned sockets"
+desc    = "Limits sockets with no owner"
+why     = "Orphan accumulation is a slow memory-exhaustion attack"
+risk    = "safe"
+
+[[flag]]
+id      = "ip_default_ttl"
+group   = "network / ipv4"
+key     = "net.ipv4.ip_default_ttl"
+value   = "64"
+default = "64"
+title   = "Default TTL"
+desc    = "Hop limit on outgoing packets"
+why     = "An unusual TTL fingerprints your operating system to anyone watching"
+risk    = "safe"
+
+[[flag]]
+id      = "ip_unprivileged_port_start"
+group   = "network / ipv4"
+key     = "net.ipv4.ip_unprivileged_port_start"
+value   = "1024"
+default = "1024"
+title   = "Privileged port boundary"
+desc    = "Lowest port needing privilege"
+why     = "Raising it stops unprivileged code binding ports that clients expect to be trustworthy"
+risk    = "caution"
+breaks  = "Unprivileged services that bind ports below the new boundary"
+
+[[flag]]
+id      = "somaxconn"
+group   = "network / tcp"
+key     = "net.core.somaxconn"
+value   = "4096"
+default = "4096"
+title   = "Listen backlog ceiling"
+desc    = "Queue depth for pending connections"
+why     = "Pairs with SYN cookies to survive a connection flood"
+risk    = "safe"
+
+[[flag]]
+id      = "netdev_max_backlog"
+group   = "network / tcp"
+key     = "net.core.netdev_max_backlog"
+value   = "16384"
+default = "1000"
+title   = "Bigger packet backlog"
+desc    = "Queue before the kernel drops packets"
+why     = "A small backlog turns a traffic burst into packet loss"
+risk    = "safe"
+
+[[flag]]
+id      = "bpf_jit_kallsyms"
+group   = "kernel / memory"
+key     = "net.core.bpf_jit_kallsyms"
+value   = "0"
+default = "1"
+title   = "Hide JIT symbols"
+desc    = "Keeps BPF code out of kallsyms"
+why     = "Exported JIT addresses hand an exploit the location of executable memory"
+risk    = "safe"
+
+[[flag]]
+id      = "bpf_jit_enable_off"
+group   = "kernel / memory"
+key     = "net.core.bpf_jit_enable"
+value   = "0"
+default = "1"
+title   = "Disable the BPF JIT"
+desc    = "Interpret BPF instead of compiling it"
+why     = "No JIT means no attacker-influenced executable pages at all"
+help    = "Stronger than bpf_jit_harden, and slower. Choose this only if you do not rely on eBPF performance."
+risk    = "caution"
+breaks  = "eBPF-heavy tooling gets much slower"
+
+[[flag]]
+id      = "fb_tunnels_only_for_init_net"
+group   = "network / ipv4"
+key     = "net.core.fb_tunnels_only_for_init_net"
+value   = "1"
+default = "0"
+title   = "No fallback tunnels in namespaces"
+desc    = "Keeps tunnel devices out of new netns"
+why     = "Every new namespace otherwise gets sit0, gre0 and friends for free"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  more network / ipv6 — neighbour discovery is the v6 equivalent of ARP spoofing
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "ipv6_drop_unsolicited_na"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.drop_unsolicited_na"
+value   = "1"
+default = "0"
+title   = "Drop unsolicited NA"
+desc    = "Ignores unrequested neighbour ads"
+why     = "Unsolicited neighbour advertisement is how IPv6 address spoofing works"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_accept_untracked_na"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.accept_untracked_na"
+value   = "0"
+default = "0"
+title   = "No untracked neighbour ads"
+desc    = "Only accepts ads you asked for"
+why     = "Completes the neighbour-discovery lockdown"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_accept_ra_from_local"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.accept_ra_from_local"
+value   = "0"
+default = "0"
+title   = "No RA from local addresses"
+desc    = "Ignores advertisements from yourself"
+why     = "A local process should not be able to reroute the host by advertising"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_forwarding"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.forwarding"
+value   = "0"
+default = "0"
+title   = "No IPv6 forwarding"
+desc    = "This machine is not an IPv6 router"
+why     = "Forwarding turns a compromised host into a pivot"
+risk    = "caution"
+breaks  = "Container bridges and VPN gateways on IPv6"
+
+[[flag]]
+id      = "ipv6_mc_forwarding"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.mc_forwarding"
+value   = "0"
+default = "0"
+title   = "No IPv6 multicast forwarding"
+desc    = "Won't relay multicast"
+why     = "Same reasoning as the IPv4 version"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_drop_unicast_in_l2_multicast"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.drop_unicast_in_l2_multicast"
+value   = "1"
+default = "0"
+title   = "Drop mismatched unicast (v6)"
+desc    = "Unicast inside a multicast frame"
+why     = "Only happens when frames are being crafted"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_accept_ra_min_hop_limit"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.all.accept_ra_min_hop_limit"
+value   = "64"
+default = "1"
+title   = "Ignore low-hop-limit RAs"
+desc    = "Rejects advertisements setting a tiny TTL"
+why     = "A hop limit of 1 confines your traffic to the local segment, where it can be read"
+risk    = "safe"

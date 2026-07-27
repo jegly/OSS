@@ -90,3 +90,42 @@ desc    = "Login screen asks for a username"
 why     = "The user list hands out valid account names for free"
 risk    = "safe"
 breaks  = "Click-to-pick login"
+
+# --------------------------------------------------------------------------- #
+#  more lock screen and lockdown
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "lock_on_suspend"
+group   = "desktop / screen lock"
+key     = "org.gnome.desktop.screensaver ubuntu-lock-on-suspend"
+value   = "true"
+default = "true"
+title   = "Lock on suspend"
+desc    = "Requires a password after resume"
+why     = "Closing the lid is the most common way a machine is left unattended"
+risk    = "safe"
+
+[[flag]]
+id      = "lockdown_command_line"
+group   = "desktop / lockdown"
+key     = "org.gnome.desktop.lockdown disable-command-line"
+value   = "true"
+default = "false"
+title   = "No command line from the desktop"
+desc    = "Blocks the Alt-F2 run prompt"
+why     = "Removes a quick path to running something arbitrary from a session left open"
+risk    = "caution"
+breaks  = "Alt-F2, and terminals launched from some file managers"
+
+[[flag]]
+id      = "lockdown_print_setup"
+group   = "desktop / lockdown"
+key     = "org.gnome.desktop.lockdown disable-print-setup"
+value   = "true"
+default = "false"
+title   = "No printer setup"
+desc    = "Cannot add or configure printers"
+why     = "Printer setup reaches the network and installs drivers"
+risk    = "safe"
+breaks  = "Adding a printer from the desktop"

@@ -108,3 +108,61 @@ title       = "No LLMNR in NetworkManager"
 desc        = "Same, for LLMNR"
 why         = "Stops your hostname being announced to the segment"
 risk        = "safe"
+
+# --------------------------------------------------------------------------- #
+#  what the machine tells the network about itself
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id          = "nm_no_dhcp_hostname_v4"
+group       = "network / identity"
+key         = "ipv4.dhcp-send-hostname"
+value       = "false"
+default     = "true"
+ini_section = "connection"
+title       = "Don't send your hostname (IPv4)"
+desc        = "DHCP request carries no name"
+why         = "Otherwise every network you join is handed your machine's name, which follows you between them"
+risk        = "safe"
+breaks      = "DHCP-registered DNS names on managed networks"
+
+[[flag]]
+id          = "nm_no_dhcp_hostname_v6"
+group       = "network / identity"
+key         = "ipv6.dhcp-send-hostname"
+value       = "false"
+default     = "true"
+ini_section = "connection"
+title       = "Don't send your hostname (IPv6)"
+desc        = "Same for DHCPv6"
+why         = "The IPv4 setting alone leaves the IPv6 request still announcing you"
+risk        = "safe"
+
+[[flag]]
+id          = "nm_addr_gen_mode"
+group       = "network / identity"
+key         = "ipv6.addr-gen-mode"
+value       = "stable-privacy"
+default     = "default"
+ini_section = "connection"
+title       = "No MAC in your IPv6 address"
+desc        = "Derives the interface ID from a secret"
+why         = "The old EUI-64 scheme embeds your MAC address in every IPv6 address you use"
+help        = "ip6-privacy handles the temporary outbound addresses. This one covers the permanent address, which otherwise still carries the hardware ID."
+risk        = "safe"
+
+[[flag]]
+id          = "nm_dns_over_tls"
+group       = "network / dns"
+key         = "connection.dns-over-tls"
+value       = "opportunistic"
+default     = "default"
+values      = ["opportunistic", "yes"]
+labels      = ["use it when available", "require it"]
+ini_section = "connection"
+title       = "Encrypt DNS lookups"
+desc        = "DNS over TLS via resolved"
+why         = "Plain DNS shows every site you visit to the network you are on"
+help        = "'Require it' fails resolution outright if the server does not support DoT, which is the honest setting but breaks on captive portals and plenty of home routers. 'When available' falls back to plain DNS, so it protects you where it can without stranding you."
+risk        = "caution"
+breaks      = "Resolvers without DoT support, and captive-portal logins"
