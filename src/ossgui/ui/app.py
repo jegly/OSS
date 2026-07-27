@@ -39,6 +39,7 @@ class OssApplication(Adw.Application):
             ("appearance", self._on_appearance),
             ("capture", self._on_capture),
             ("save-preset", self._on_save_preset),
+            ("clear-preset", self._on_clear_preset),
         ):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", handler)
@@ -143,6 +144,20 @@ class OssApplication(Adw.Application):
         from .capture_dialog import CaptureDialog
 
         CaptureDialog(self.window).present()
+
+    def _on_clear_preset(self, *_args) -> None:
+        """Unload the preset and drop every staged change.
+
+        Nothing has been written at this point — staging is deliberately
+        separate from the system — so this needs no confirmation and cannot
+        lose anything that was applied.
+        """
+        staged = self.window.staging.changed_count()
+        self.window._on_discard(None)
+        self.window.toast(
+            f"Cleared {staged} staged change(s). Nothing was written."
+            if staged else "No preset. Nothing was staged."
+        )
 
     def _on_save_preset(self, *_args) -> None:
         if self.window is None or self.catalogue is None:

@@ -204,7 +204,23 @@ class FlagCard(Gtk.Box):
         if self._updating:
             return False
         if active:
-            self.staging.set(self.flag.id, self._current_control_value())
+            value = self._current_control_value()
+            if self.flag.editable and not self.flag.value_is_allowed(value):
+                # An editable flag with nothing typed yet (AllowUsers, AllowGroups)
+                # would otherwise stage a value the helper is guaranteed to reject
+                # at apply time — and reject the *whole* transaction over it, not
+                # just this flag. Veto the toggle instead of staging a value we
+                # already know is invalid.
+                if hasattr(self, "entry"):
+                    self.entry.add_css_class("error")
+                    self.entry.set_tooltip_text(
+                        "Type a value here first — this flag has no default, and "
+                        "an empty or malformed one would be rejected at apply "
+                        "time, taking the rest of the transaction with it."
+                    )
+                    self.entry.grab_focus()
+                return True
+            self.staging.set(self.flag.id, value)
         else:
             self.staging.set(self.flag.id, None)
         return False
@@ -259,7 +275,15 @@ class FlagCard(Gtk.Box):
             if hasattr(self, "dropdown"):
                 self.dropdown.set_sensitive(staged)
             if hasattr(self, "entry"):
-                self.entry.set_sensitive(staged)
+                # Always editable, unlike the dropdown. An editable flag can
+                # ship with no default (AllowUsers, AllowGroups — there is no
+                # sensible list to suggest), and the switch refuses to stage a
+                # value that fails the flag's pattern. Gating the entry on
+                # `staged` as well would leave those two flags impossible to
+                # turn on: no way to stage without a value, no way to type one
+                # without staging. Typing while unstaged is harmless — _on_entry
+                # only writes through to staging once the flag is set.
+                self.entry.set_sensitive(True)
 
             if self.staging.is_changed(self.flag.id):
                 self.add_css_class("selected")

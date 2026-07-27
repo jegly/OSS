@@ -19,6 +19,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 from .. import privileged, probe, render, sysctl_chain  # noqa: E402
+from .. import accounts as accounts_module  # noqa: E402
 from .. import apparmor as apparmor_module  # noqa: E402
 from .. import snapd as snapd_module  # noqa: E402
 from .. import ufw as ufw_module, units as units_module  # noqa: E402
@@ -40,6 +41,40 @@ def unified_diff(path: str, before: str, after: str) -> str:
         n=3,
     )
     return "".join(lines)
+
+
+#: A row's subtitle is a Gtk.Label, and a label's *minimum* height is its full
+#: wrapped text — set_subtitle_lines() only caps that when ellipsizing is on,
+#: which it is not for an Adw.ActionRow. So an unclamped subtitle sets a floor
+#: the surrounding ScrolledWindow cannot shrink below, and the dialog grows to
+#: fit it. `sysctl --system` prints every key it applied: on the paranoid
+#: preset that one row measured 5900px, pushing the buttons off the screen with
+#: no way to scroll to them or close the window.
+SUBTITLE_LINES = 6
+MAX_ROW_CHARS = 400
+
+
+def _clamp(text: str, lines: int = SUBTITLE_LINES, chars: int = MAX_ROW_CHARS) -> str:
+    """Cut *text* down to something a row can render without resizing the window.
+
+    Says what it dropped rather than trailing off, so a truncated command output
+    cannot be mistaken for the whole of it. The full text is always in the
+    helper's own log; this is the summary.
+    """
+    text = text.strip()
+    parts = text.splitlines()
+    dropped_lines = max(0, len(parts) - lines)
+    if dropped_lines:
+        parts = parts[:lines]
+    out = "\n".join(parts)
+    if len(out) > chars:
+        out = out[:chars].rstrip() + "…"
+        if not dropped_lines:
+            return out + "  (truncated)"
+    if dropped_lines:
+        out += f"\n… and {dropped_lines} more line(s)"
+    return out
+
 
 
 class ReviewDialog(Adw.Window):
@@ -67,9 +102,19 @@ class ReviewDialog(Adw.Window):
         switcher = Adw.ViewSwitcher(stack=self.stack, policy=Adw.ViewSwitcherPolicy.WIDE)
         header.set_title_widget(switcher)
 
-        self.stack.add_titled(self._summary_page(), "summary", "Summary")
-        self.stack.add_titled(self._diff_page(), "diff", "File diff")
-        self.stack.add_titled(self._commands_page(), "commands", "Commands")
+        # add_titled() alone leaves each page without an icon name, and the
+        # switcher's wide policy wants one — without it GTK falls back to its
+        # "icon not found" placeholder, which this icon theme renders as a red
+        # no-entry glyph. A real icon per tab avoids the fallback outright.
+        self.stack.add_titled(self._summary_page(), "summary", "Summary").set_icon_name(
+            "view-list-bullet-symbolic"
+        )
+        self.stack.add_titled(self._diff_page(), "diff", "File diff").set_icon_name(
+            "text-x-generic-symbolic"
+        )
+        self.stack.add_titled(self._commands_page(), "commands", "Commands").set_icon_name(
+            "utilities-terminal-symbolic"
+        )
         toolbar.set_content(self.stack)
         toolbar.add_bottom_bar(self._footer())
 
@@ -123,27 +168,37 @@ class ReviewDialog(Adw.Window):
         staging = self.window.staging
         page = Adw.PreferencesPage()
 
-        counts = Adw.PreferencesGroup(title="What this will do")
-        counts.add(
-            self._row(
-                f"{len(self.plan.writes)} file(s) written",
-                ", ".join(w.path for w in self.plan.writes) or "none",
+        # One row per file and per command, not a comma-run in a subtitle.
+        # "12 file(s) written" followed by every path joined into one line is
+        # unreadable at exactly the moment the user is deciding whether to
+        # trust it, and it was the same unbounded-label problem that grew the
+        # apply dialog off the screen.
+        if self.plan.writes:
+            files = Adw.PreferencesGroup(
+                title=f"{len(self.plan.writes)} file(s) written",
+                description="Each one is a drop-in this app owns unless marked otherwise.",
             )
-        )
+            for write in self.plan.writes:
+                section = self.window.catalogue.section(write.section) if write.section else None
+                files.add(self._row(
+                    write.path,
+                    ("in-place edit — undo is restoring the .bak"
+                     if write.in_place else
+                     f"{section.title if section else write.section} · "
+                     f"delete this file to undo"),
+                ))
+            page.add(files)
+
         if self.plan.removes:
-            counts.add(
-                self._row(
-                    f"{len(self.plan.removes)} file(s) deleted",
-                    ", ".join(r.path for r in self.plan.removes)
-                    + "  — these sections go back to stock",
-                )
+            gone = Adw.PreferencesGroup(
+                title=f"{len(self.plan.removes)} file(s) deleted",
+                description="These sections go back to stock.",
             )
-        counts.add(
-            self._row(
-                f"{len(self.plan.commands)} command(s) run as root",
-                "; ".join(str(c) for c in self.plan.commands) or "none",
-            )
-        )
+            for removal in self.plan.removes:
+                gone.add(self._row(removal.path, removal.section))
+            page.add(gone)
+
+        counts = Adw.PreferencesGroup(title="What this will do")
 
         if self.window.unit_changes:
             masked = [n for n, a in self.window.unit_changes.items() if a == "mask"]
@@ -165,6 +220,17 @@ class ReviewDialog(Adw.Window):
                     "thing most likely to cut the connection you are working over.",
                 )
             )
+        if self.plan.commands:
+            page.add(counts)
+            root_cmds = Adw.PreferencesGroup(
+                title=f"{len(self.plan.commands)} command(s) run as root",
+                description="In this order, inside the one transaction.",
+            )
+            for command in self.plan.commands:
+                root_cmds.add(self._row(str(command), command.why))
+            page.add(root_cmds)
+            counts = Adw.PreferencesGroup(title="Also")
+
         if self.plan.user_commands:
             counts.add(
                 self._row(
@@ -193,6 +259,19 @@ class ReviewDialog(Adw.Window):
             )
             for flag in breaking:
                 group.add(self._row(flag.title, flag.breaks or flag.desc))
+            page.add(group)
+
+        accounts_payload = self.window.accounts_payload()
+        if accounts_payload:
+            group = Adw.PreferencesGroup(
+                title="Account changes",
+                description=(
+                    "Not something restoring a file can undo. Refused again by "
+                    "the helper if anything about it has changed since you staged it."
+                ),
+            )
+            for what, detail in accounts_module.preview(accounts_payload):
+                group.add(self._row(what, detail))
             page.add(group)
 
         for message in self._cross_checks():
@@ -380,6 +459,19 @@ class ReviewDialog(Adw.Window):
                 ))
             page.add(group)
 
+        accounts_payload = self.window.accounts_payload()
+        if accounts_payload:
+            group = Adw.PreferencesGroup(
+                title="Accounts",
+                description=(
+                    "Also not something a restored file can undo — refused again "
+                    "here if anything about it has changed since you staged it."
+                ),
+            )
+            for what, detail in accounts_module.preview(accounts_payload):
+                group.add(self._row(what, detail))
+            page.add(group)
+
         if self.window.snap_changes:
             revoked = [
                 p for p, a in self.window.snap_changes.items() if a == "disconnect"
@@ -429,11 +521,11 @@ class ReviewDialog(Adw.Window):
 
     @staticmethod
     def _row(title: str, subtitle: str) -> Adw.ActionRow:
-        row = Adw.ActionRow(title=GLib.markup_escape_text(title))
+        row = Adw.ActionRow(title=GLib.markup_escape_text(_clamp(title, lines=2)))
         if subtitle:
-            row.set_subtitle(GLib.markup_escape_text(subtitle))
+            row.set_subtitle(GLib.markup_escape_text(_clamp(subtitle)))
         row.set_title_lines(2)
-        row.set_subtitle_lines(6)
+        row.set_subtitle_lines(SUBTITLE_LINES)
         return row
 
     @staticmethod
@@ -465,7 +557,6 @@ class ApplyProgressDialog(Adw.Window):
             title="Waiting for authentication",
             description="pkexec is asking for your password. Nothing has been "
             "written yet — cancelling here leaves the system untouched.",
-            icon_name="dialog-password-symbolic",
         )
         self.spinner = Gtk.Spinner(spinning=True, width_request=32, height_request=32)
         self.status.set_child(self.spinner)
@@ -474,7 +565,38 @@ class ApplyProgressDialog(Adw.Window):
         self.toolbar.add_top_bar(Adw.HeaderBar(show_title=True))
         self.set_content(self.toolbar)
 
+        self._elapsed = 0
+        self._phase = "Waiting for authentication"
         self.connect("map", lambda *_: self._start())
+        # A ticking elapsed count is the difference between "this is slow" and
+        # "this has hung". update-initramfs alone can run for a minute or two.
+        self._tick_id = GLib.timeout_add_seconds(1, self._tick)
+        self.connect("close-request", lambda *_: self._stop_tick())
+
+    def _stop_tick(self) -> bool:
+        if getattr(self, "_tick_id", None) is not None:
+            GLib.source_remove(self._tick_id)
+            self._tick_id = None
+        return False
+
+    def _tick(self) -> bool:
+        if self._settled:
+            self._tick_id = None
+            return False
+        self._elapsed += 1
+        minutes, seconds = divmod(self._elapsed, 60)
+        clock = f"{minutes}m {seconds:02d}s" if minutes else f"{seconds}s"
+        self.status.set_description(f"{self._phase}\n\nElapsed: {clock}")
+        return True
+
+    def _on_progress(self, text: str) -> None:
+        """Called from the helper's reader thread — hop to the UI thread first."""
+        def update() -> bool:
+            self._phase = text
+            self.status.set_title("Applying")
+            return False
+
+        GLib.idle_add(update)
 
     def _start(self) -> None:
         selection = dict(self.window.staging.selection)
@@ -488,10 +610,11 @@ class ApplyProgressDialog(Adw.Window):
         snap_changes = dict(self.window.snap_changes)
         package_removals = sorted(self.window.package_removals)
         extras = self.window.extras_payload()
+        accounts = self.window.accounts_payload()
         thread = threading.Thread(
             target=self._worker,
             args=(selection, firewall, unit_changes, apparmor_changes, extras,
-                  snap_changes, package_removals),
+                  snap_changes, package_removals, accounts),
             daemon=True,
         )
         thread.start()
@@ -505,6 +628,7 @@ class ApplyProgressDialog(Adw.Window):
         extras: dict,
         snap_changes: dict,
         package_removals: list,
+        accounts: dict,
     ) -> None:
         outcome = privileged.apply(
             selection,
@@ -514,20 +638,80 @@ class ApplyProgressDialog(Adw.Window):
             extras=extras,
             snap_changes=snap_changes,
             package_removals=package_removals,
+            accounts=accounts,
+            on_progress=self._on_progress,
         )
         user_results = []
+        facts = None
         if outcome.ok:
             plan = build_plan(self.window)
             if plan.user_commands:
-                user_results = privileged.run_user_commands(plan.user_commands)
-        GLib.idle_add(self._finish, outcome, user_results)
+                user_results = privileged.run_user_commands(
+                    plan.user_commands, on_progress=self._on_progress
+                )
+            # probe.gather() shells out to systemctl and gsettings and re-reads
+            # every target file. Left in _finish it ran on the main thread and
+            # froze the window — including this dialog's own elapsed clock —
+            # for as long as it took, which is indistinguishable from a crash.
+            self._on_progress("Re-reading system state")
+            facts = probe.gather(self.window.catalogue)
+        GLib.idle_add(self._finish, outcome, user_results, facts)
 
-    def _finish(self, outcome: privileged.ApplyOutcome, user_results: list) -> bool:
+    def _finish(self, outcome: privileged.ApplyOutcome, user_results: list, facts=None) -> bool:
+        """Swap the spinner for the result. Never leaves the dialog mid-air.
+
+        _settled is set first, which stops the elapsed clock — so anything that
+        throws after this point used to leave a frozen dialog showing the last
+        progress line forever, because GLib swallows exceptions raised inside
+        an idle callback. That happened for real: one `self._row` where the
+        class has no such method, on a page that only builds when a section was
+        skipped. The apply had succeeded; the user had no way to know.
+        """
         if self._settled:
             return False
         self._settled = True
         self.outcome = outcome
         self.spinner.stop()
+        try:
+            return self._finish_inner(outcome, user_results, facts)
+        except Exception as exc:  # noqa: BLE001 — last line before a frozen window
+            import traceback
+
+            self._show_crash(exc, traceback.format_exc())
+            return False
+
+    def _show_crash(self, exc: Exception, detail: str) -> None:
+        """Report a failure in our own reporting, rather than showing nothing.
+
+        The transaction itself is already over by the time this can happen, so
+        the important thing to say is that it finished and this is only the
+        summary that broke.
+        """
+        page = Adw.PreferencesPage()
+        group = Adw.PreferencesGroup(
+            title="The apply finished, but this summary could not be drawn",
+            description=(
+                "Your changes were applied and the helper has exited — this is a "
+                "bug in the results screen, not in the transaction. It is safe to "
+                "close this window. Please report the detail below."
+            ),
+        )
+        group.add(ReviewDialog._row(type(exc).__name__, str(exc)))
+        for line in detail.strip().splitlines()[-6:]:
+            group.add(ReviewDialog._row(line.strip(), ""))
+        page.add(group)
+
+        scroller = Gtk.ScrolledWindow(child=page, vexpand=True)
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.toolbar.set_content(scroller)
+        if self._button_bar is not None:
+            self.toolbar.remove(self._button_bar)
+        self._button_bar = self._buttons(reboot=False)
+        self.toolbar.add_bottom_bar(self._button_bar)
+
+    def _finish_inner(
+        self, outcome: privileged.ApplyOutcome, user_results: list, facts=None
+    ) -> bool:
 
         if outcome.cancelled:
             self._show_result(
@@ -552,12 +736,18 @@ class ApplyProgressDialog(Adw.Window):
         applied = sum(1 for v in outcome.outcomes.values() if v == "applied")
         pending = len(outcome.needs_reboot)
         failed = outcome.failed_flags
+        skipped = [k for k, v in outcome.outcomes.items() if v == "skipped"]
 
         parts = [f"{applied} in effect now"]
         if pending:
             parts.append(f"{pending} waiting for a reboot")
         if failed:
             parts.append(f"{len(failed)} did not take")
+        if skipped:
+            # Deliberately worded as not-attempted rather than not-applied:
+            # these never reached the plan, so calling them failures would be
+            # reporting a problem the machine does not have.
+            parts.append(f"{len(skipped)} not applicable here")
 
         self._show_result(
             "dialog-warning-symbolic" if failed else "emblem-ok-symbolic",
@@ -568,7 +758,7 @@ class ApplyProgressDialog(Adw.Window):
             reboot=bool(pending),
         )
 
-        self.window.refresh_from_system()
+        self.window.refresh_from_system(facts)
         return False
 
     def _show_result(
@@ -638,6 +828,30 @@ class ApplyProgressDialog(Adw.Window):
 
     def _details_view(self, outcome: privileged.ApplyOutcome, user_results: list) -> Gtk.Widget:
         page = Adw.PreferencesPage()
+
+        skipped = [k for k, v in outcome.outcomes.items() if v == "skipped"]
+        if skipped:
+            group = Adw.PreferencesGroup(
+                title="Not applicable on this system",
+                description=(
+                    "Nothing was written for these. The tool that would read "
+                    "them is not installed, or the section does not exist on "
+                    "this distribution — so they were left alone rather than "
+                    "written somewhere nothing reads."
+                ),
+            )
+            by_section: dict[str, list[str]] = {}
+            for flag_id in skipped:
+                flag = self.window.catalogue.get(flag_id)
+                if flag is not None:
+                    by_section.setdefault(flag.section, []).append(flag_id)
+            for section_id, ids in sorted(by_section.items()):
+                section = self.window.catalogue.section(section_id)
+                group.add(ReviewDialog._row(
+                    f"{section.title} — {len(ids)} setting(s)",
+                    render.section_skip_reason(section),
+                ))
+            page.add(group)
 
         if outcome.failed_flags:
             group = Adw.PreferencesGroup(

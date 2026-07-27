@@ -18,7 +18,7 @@ from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 from .. import presets as presets_module  # noqa: E402
 from .. import apparmor as apparmor_module  # noqa: E402
-from .. import probe, settings as settings_module, ufw as ufw_module  # noqa: E402
+from .. import distro, probe, settings as settings_module, ufw as ufw_module  # noqa: E402
 
 from ..catalogue import Catalogue, Section  # noqa: E402
 from ..probe import State  # noqa: E402
@@ -92,6 +92,13 @@ class MainWindow(Adw.ApplicationWindow):
         self.package_cascade = None
         #: path -> {"mode","owner","group","durable","immutable"} for any path.
         self.filemode_changes: dict[str, dict] = {}
+        #: Usernames and group names staged for deletion.
+        self.account_delete_users: set[str] = set()
+        self.account_delete_groups: set[str] = set()
+        #: Whether a deleted user's home directory goes with them.
+        self.account_remove_home: bool = False
+        #: username -> set of group names to drop membership of, short of deletion.
+        self.account_remove_member: dict[str, set[str]] = {}
 
         self.states = probe.all_states(catalogue, facts, staging.selection)
         self.unaffected = probe.unaffected_mitigations(catalogue, facts)
@@ -325,6 +332,15 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _preset_menu(self) -> Gio.Menu:
         menu = Gio.Menu()
+
+        # "Discard changes" in the bottom bar already does this, but nobody
+        # looks there for it: having loaded a preset from this menu, the way
+        # back out is the first thing you expect to find in the same menu.
+        # Without it the only apparent escape was restarting the app.
+        clear = Gio.Menu()
+        clear.append("No preset — clear staged changes", "app.clear-preset")
+        menu.append_section(None, clear)
+
         shipped = Gio.Menu()
         for preset in presets_module.available():
             shipped.append(preset.name.title(), f"app.preset::{preset.key}")
@@ -433,6 +449,12 @@ class MainWindow(Adw.ApplicationWindow):
                 from .apparmor_page import ApparmorPage
 
                 self.grid_box.append(ApparmorPage(self))
+                self._refresh_chrome()
+                return
+            if section_id == "accounts":
+                from .accounts_page import AccountsPage
+
+                self.grid_box.append(AccountsPage(self))
                 self._refresh_chrome()
                 return
             if section_id == "integrity":
@@ -626,7 +648,7 @@ class MainWindow(Adw.ApplicationWindow):
         if section.requires_pkg and not probe.package_present(section.requires_pkg):
             return (
                 f"Needs the {section.requires_pkg} package, which is not installed. "
-                f"Install it offline with:  sudo apt install ./{section.requires_pkg}*.deb"
+                f"Install it with:  {distro.install_hint(section.requires_pkg)}"
             )
         return ""
 
@@ -670,6 +692,22 @@ class MainWindow(Adw.ApplicationWindow):
             extras["filemode"] = dict(self.filemode_changes)
         return extras
 
+    def accounts_payload(self) -> dict:
+        """The staged user/group deletions and membership changes."""
+        payload: dict = {}
+        if self.account_delete_users:
+            payload["delete_users"] = sorted(self.account_delete_users)
+            payload["remove_home"] = self.account_remove_home
+        if self.account_delete_groups:
+            payload["delete_groups"] = sorted(self.account_delete_groups)
+        if self.account_remove_member:
+            payload["remove_member"] = {
+                user: sorted(groups)
+                for user, groups in self.account_remove_member.items()
+                if groups
+            }
+        return payload
+
     def firewall_changes(self) -> list[tuple[list[str], str]]:
         """The ufw commands the staged firewall edits would run."""
         if not self.firewall_dirty:
@@ -692,6 +730,9 @@ class MainWindow(Adw.ApplicationWindow):
             + len(self.snap_changes)
             + len(self.package_removals)
             + len(self.filemode_changes)
+            + len(self.account_delete_users)
+            + len(self.account_delete_groups)
+            + sum(len(groups) for groups in self.account_remove_member.values())
             + (1 if self.bootloader_change else 0)
         )
         if count:
@@ -778,8 +819,12 @@ class MainWindow(Adw.ApplicationWindow):
         self.apparmor = apparmor_module.read_unprivileged()
         for staged in (self.sandbox_changes, self.permission_changes,
                        self.fstab_changes, self.bootloader_change, self.usb_change,
-                       self.snap_changes):
+                       self.snap_changes, self.package_removals, self.filemode_changes,
+                       self.account_delete_users, self.account_delete_groups,
+                       self.account_remove_member):
             staged.clear()
+        self.package_cascade = None
+        self.account_remove_home = False
         self.apparmor_changes.clear()
         self.staging.reset_to_baseline()
         self._show_section(self.current_section)
@@ -800,9 +845,22 @@ class MainWindow(Adw.ApplicationWindow):
 
         ApplyProgressDialog(self).present()
 
-    def refresh_from_system(self) -> None:
-        """Re-probe after an Apply so every dot and badge tells the truth again."""
-        self.facts = probe.gather(self.catalogue)
+    def refresh_from_system(self, facts=None) -> None:
+        """Re-probe after an Apply so every dot and badge tells the truth again.
+
+        The only caller is a *successful* Apply (ApplyProgressDialog._finish),
+        so every staged ad-hoc change below just ran and must not be re-offered.
+        Left alone, the "N changed" counter stays wrong and a second Apply
+        re-runs commands against targets that no longer exist — userdel on an
+        already-deleted account, apt-get remove on an already-removed package —
+        which fails loudly instead of doing nothing.
+        """
+        # probe.gather() shells out to systemctl and gsettings and re-reads
+        # every target file. Done on the main thread it freezes the window for
+        # as long as it takes, which looked exactly like the app hanging after
+        # a successful apply. The dialog now gathers on its worker and hands
+        # the result in.
+        self.facts = facts if facts is not None else probe.gather(self.catalogue)
         self.states = probe.all_states(self.catalogue, self.facts, self.staging.selection)
         self.staging.rebaseline(self.facts)
         # Policies re-read from the readable files; rules keep whatever the last
@@ -814,6 +872,26 @@ class MainWindow(Adw.ApplicationWindow):
         self.firewall_baseline = refreshed.copy()
         self.firewall_dirty = False
         self.unit_changes.clear()
+
+        self.apparmor_changes.clear()
+        self.apparmor = apparmor_module.read_unprivileged()
+        for staged in (
+            self.sandbox_changes, self.permission_changes, self.fstab_changes,
+            self.usb_change, self.snap_changes, self.package_removals,
+            self.filemode_changes, self.account_delete_users,
+            self.account_delete_groups, self.account_remove_member,
+        ):
+            staged.clear()
+        self.bootloader_change.clear()
+        self.package_cascade = None
+        self.account_remove_home = False
+        # These are read once and cached on first visit to the page (packages,
+        # snap, accounts); drop the cache so a later visit re-reads current
+        # state instead of the list from before the apply.
+        for attr in ("packages", "snaps", "accounts_users", "accounts_groups"):
+            if hasattr(self, attr):
+                delattr(self, attr)
+
         self._show_section(self.current_section)
 
     def toast(self, message: str, timeout: int = 4) -> None:

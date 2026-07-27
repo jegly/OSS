@@ -13,10 +13,11 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import paths
+from . import apply as apply_module, paths
 
 #: pkexec asks for a password and the user may take their time over it.
 APPLY_TIMEOUT = 900
@@ -68,6 +69,7 @@ def build_payload(
     extras: dict | None = None,
     snap_changes: dict[str, str] | None = None,
     package_removals: list[str] | None = None,
+    accounts: dict | None = None,
 ) -> dict:
     payload: dict = {"version": 1, "selection": dict(selection)}
     if sections is not None:
@@ -82,6 +84,8 @@ def build_payload(
         payload["snap"] = dict(snap_changes)
     if package_removals:
         payload["packages"] = {"remove": sorted(package_removals)}
+    if accounts:
+        payload["accounts"] = accounts
     for key, value in (extras or {}).items():
         if value:
             payload[key] = value
@@ -136,17 +140,24 @@ def apply(
     extras: dict | None = None,
     snap_changes: dict[str, str] | None = None,
     package_removals: list[str] | None = None,
+    accounts: dict | None = None,
+    on_progress=None,
 ) -> ApplyOutcome:
-    """Hand the selection to the helper through pkexec and parse the result."""
+    """Hand the selection to the helper through pkexec and parse the result.
+
+    *on_progress* is called from a reader thread with each line the helper
+    reports, so the dialog can say what is happening instead of spinning.
+    """
     return _invoke(
         build_payload(
             selection, sections, firewall, unit_changes, apparmor_changes, extras,
-            snap_changes, package_removals,
-        )
+            snap_changes, package_removals, accounts,
+        ),
+        on_progress,
     )
 
 
-def _invoke(payload: dict) -> ApplyOutcome:
+def _invoke(payload: dict, on_progress=None) -> ApplyOutcome:
     """Write the payload somewhere private and run the helper under pkexec."""
     helper = paths.helper_path()
     if not Path(helper).exists():
@@ -171,18 +182,15 @@ def _invoke(payload: dict) -> ApplyOutcome:
         os.chmod(payload_path, stat.S_IRUSR | stat.S_IWUSR)
 
         try:
-            completed = subprocess.run(
-                ["pkexec", helper, str(payload_path)],
-                capture_output=True,
-                text=True,
-                timeout=APPLY_TIMEOUT,
-                check=False,
+            stdout, stderr, returncode = _run_streaming(
+                ["pkexec", helper, str(payload_path)], on_progress
             )
         except subprocess.TimeoutExpired:
             return ApplyOutcome(False, error="the helper did not finish in time")
         except OSError as exc:
             return ApplyOutcome(False, error=f"could not start pkexec: {exc}")
 
+        completed = _Completed(stdout, stderr, returncode)
         if completed.returncode == PKEXEC_CANCELLED:
             return ApplyOutcome(False, cancelled=True, error="Authentication cancelled.")
         if completed.returncode == PKEXEC_FAILED and not completed.stdout.strip():
@@ -195,6 +203,82 @@ def _invoke(payload: dict) -> ApplyOutcome:
         return _parse(completed.stdout, completed.stderr, completed.returncode)
     finally:
         payload_path.unlink(missing_ok=True)
+
+
+@dataclass
+class _Completed:
+    """The shape subprocess.run used to hand back, kept so _parse is unchanged."""
+
+    stdout: str
+    stderr: str
+    returncode: int
+
+
+def _run_streaming(argv: list[str], on_progress) -> tuple[str, str, int]:
+    """Run the helper, forwarding its progress lines as they arrive.
+
+    subprocess.run() would block until the helper exits, which is why the
+    dialog could only show a spinner: on a real machine update-initramfs and a
+    couple of dozen systemctl calls take minutes, and "still going" looked
+    identical to "hung". stderr is read line by line while it runs; stdout is
+    collected whole, because that is the JSON result.
+    """
+    process = subprocess.Popen(
+        argv,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    stderr_lines: list[str] = []
+
+    def pump() -> None:
+        assert process.stderr is not None
+        for line in process.stderr:
+            stderr_lines.append(line)
+            if on_progress is not None and line.startswith(apply_module.PROGRESS_PREFIX):
+                on_progress(line[len(apply_module.PROGRESS_PREFIX):].strip())
+
+    # One reader thread per pipe, and the timeout enforced by wait() on the
+    # main thread.
+    #
+    # Deliberately not communicate(): it reads *both* pipes itself, so with the
+    # pump already on stderr there were two readers on one stream and
+    # communicate() closed it mid-iteration, silently dropping 73KB of 256KB in
+    # the test. But reading stdout inline here instead is no better — read()
+    # blocks until the helper exits, so APPLY_TIMEOUT never fires and a hung
+    # helper hangs the application with it. Both of those were real, and both
+    # were caught by tests/test_streaming.py rather than by reasoning about it.
+    stdout_chunks: list[str] = []
+
+    def collect() -> None:
+        assert process.stdout is not None
+        stdout_chunks.append(process.stdout.read())
+
+    readers = [
+        threading.Thread(target=pump, daemon=True),
+        threading.Thread(target=collect, daemon=True),
+    ]
+    for reader in readers:
+        reader.start()
+
+    try:
+        try:
+            process.wait(timeout=APPLY_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+            raise
+    finally:
+        # Joined on every path, timeout included: a reader still blocked on a
+        # pipe after this returns is a thread leaked per apply.
+        for reader in readers:
+            reader.join(timeout=5)
+        for pipe in (process.stdout, process.stderr):
+            if pipe is not None and not pipe.closed:
+                pipe.close()
+
+    return "".join(stdout_chunks), "".join(stderr_lines), process.returncode
 
 
 def _parse(stdout: str, stderr: str, returncode: int) -> ApplyOutcome:
@@ -220,14 +304,20 @@ def _parse(stdout: str, stderr: str, returncode: int) -> ApplyOutcome:
     )
 
 
-def run_user_commands(commands) -> list[tuple[str, bool, str]]:
+def run_user_commands(commands, on_progress=None) -> list[tuple[str, bool, str]]:
     """Run the unprivileged half of a plan — gsettings writes the *user's* dconf.
 
     These deliberately never go through pkexec: run as root they would write
     root's dconf database and change nothing about the logged-in session.
     """
     results = []
-    for command in commands:
+    total = len(commands)
+    for index, command in enumerate(commands, 1):
+        # Each of these spawns a process with a 30s ceiling, so a stalled dconf
+        # can hold the whole run for minutes. Reporting per command is the
+        # difference between "slow" and "the dialog has died".
+        if on_progress is not None:
+            on_progress(f"Applying desktop settings  ({index} of {total})")
         try:
             completed = subprocess.run(
                 list(command.argv), capture_output=True, text=True, timeout=30, check=False
