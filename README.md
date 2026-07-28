@@ -12,6 +12,10 @@
 
 <br>
 
+**Contributors welcome.** There's a lot of potential here and plenty of it is still open — see [Contributing](#contributing).
+
+<br>
+
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-Linux-333?style=flat-square&logo=linux&logoColor=white)
 ![GTK4](https://img.shields.io/badge/GTK-4.0-4A90D9?style=flat-square&logo=gtk&logoColor=white)
@@ -20,19 +24,22 @@
 ![Tests](https://img.shields.io/badge/tests-234%20passing-brightgreen?style=flat-square)
 ![Packages](https://img.shields.io/badge/packages-deb%20%7C%20rpm%20%7C%20pkgbuild-orange?style=flat-square)
 
-
 </div>
 
 ---
 
 ## Install
 
+Grab the package for your distribution from [Releases](https://github.com/jegly/OSS/releases/latest), then:
+
 | Distribution | Command |
 |---|---|
-| **Debian · Ubuntu · Mint · Pop!\_OS · elementary · Zorin** | `sudo apt install ./oss_0.1.0_all.deb` |
-| **Arch · Manjaro · EndeavourOS · CachyOS** | `sudo pacman -U oss-0.1.0-1-any.pkg.tar.*` |
-| **Fedora · Nobara · RHEL · Rocky · Alma** | `sudo dnf install oss-0.1.0-1.noarch.rpm` |
-| **openSUSE Tumbleweed · Leap** | `sudo zypper install oss-0.1.0-1.noarch.rpm` |
+| **Debian · Ubuntu · Mint · Pop!\_OS · elementary · Zorin** | `sudo apt install ./oss_0.1.1_all.deb` |
+| **Arch · Manjaro · EndeavourOS · CachyOS** | `sudo pacman -U oss-0.1.1-1-any.pkg.tar.*` |
+| **Fedora · Nobara · RHEL · Rocky · Alma** | `sudo dnf install oss-0.1.1-1.noarch.rpm oss-fonts-0.1.1-1.noarch.rpm` |
+| **openSUSE Tumbleweed · Leap** | `sudo zypper install oss-0.1.1-1.noarch.rpm oss-fonts-0.1.1-1.noarch.rpm` |
+
+The RPM ships the typefaces separately, so install both or the interface falls back to system fonts.
 
 Or let it work out which one your system wants, build it, and install it:
 
@@ -56,7 +63,6 @@ There is **no AppImage, Flatpak or Snap**, and there will not be. See [Why no Ap
 ## What is OSS?
 
 OSS — Operating System Security — is a GTK4 app that puts Linux hardening settings in a window. You tick what you want, it shows you the exact diff of every file it is about to change, and applies the whole lot behind one password prompt.
-
 
 ---
 
@@ -158,6 +164,10 @@ What's missing was never the mechanism. It's that almost nobody turns them on, b
 
 **Capture** — reads the effective configuration rather than copying config files around, maps what it finds onto the catalogue, and tells you what it saw. A machine hardened by hand accumulates keys that stopped doing anything years ago; this one had `kernel.exec-shield` and `security.bprm_checkIP` sitting in its config, neither of which has existed in a kernel for a very long time.
 
+**Back up and restore** — the other half of that, and deliberately not the same thing. Capture reads the effective state and maps it onto the catalogue; this copies the **files themselves**, from 21 locations derived from the catalogue, including every hand-made setting this app knows nothing about. Your config becomes one `.tar.gz` you can read yourself.
+
+Both directions are per-category, because a configuration isn't always portable in one piece. Restoring onto a machine with different usernames? Leave `/etc/sudoers.d` out. Different disks? Leave `/etc/fstab` out. Restoring shows which files would be created and which replaced before anything is written, then goes through the same transaction as an ordinary apply — `.bak` first, validators where they exist, everything put back if any step fails.
+
 ---
 
 ## Not breaking your machine
@@ -171,6 +181,7 @@ What's missing was never the mechanism. It's that almost nobody turns them on, b
 | **Validators run first** | `sshd -t`, `visudo -c`, `auditctl -R` against the candidate file. For `fstab`, a live `mount -o remount`, so an option the kernel won't accept fails while the filesystem is still mounted rather than at boot. |
 | **One transaction** | Any failure restores every file and inverts the unit changes. |
 | **Read-back after apply** | Every value is re-read off the live system and reported as in effect, waiting for a reboot, or didn't take. |
+| **A way out that isn't this app** | Back up every configuration location to a plain `.tar.gz` before you change anything. Restoring goes through the same transaction, per category, and the archive stays readable with `tar` if you'd rather not. |
 | **Irreversible things are gated** | `kexec_load_disabled`, `modules_disabled`, `lockdown=confidentiality` and audit `-e 2` appear in no preset except `paranoid`, and Apply stays disabled until you've scrolled to the end of the risk summary. |
 | **The platform is checked, not assumed** | Ubuntu 26.04 ships `sudo-rs`, which rejects four sudoers directives GNU sudo has. Those are greyed out with the reason rather than failing the transaction at validation time. |
 
@@ -253,6 +264,39 @@ Terminal palettes were designed for terminal text, and a fair few fall well unde
 
 ---
 
+## Contributing
+
+Contributions are very welcome. This is a large idea with a lot of surface still open, and most of what's missing doesn't need deep knowledge of the codebase — it needs someone who knows a distro, or a subsystem, better than I do.
+
+**The biggest gap is distro support.** About 370 of the 614 settings already work everywhere; the rest are Debian-shaped, and each one is a self-contained piece of work:
+
+| Where help is most useful | What it involves |
+|---|---|
+| **grub on Arch and Fedora** | `/etc/default/grub.d/` is a Debian invention. Needs a different strategy for the 54 settings that depend on it. |
+| **A firewalld backend** | The ufw section needs an equivalent for Fedora and openSUSE. |
+| **SELinux alongside AppArmor** | The AppArmor page has no counterpart on Fedora or RHEL. |
+| **dnf and pacman backends** | For the packages and integrity sections, which are apt- and dpkg-shaped today. |
+| **PAM under `authselect`** | Editing `login.defs` in place is wrong on Fedora, where authselect owns the stack. |
+| **`dnf-automatic`** | The updates section writes `/etc/apt/apt.conf.d`; Arch has no equivalent at all. |
+
+**Testing on real hardware is genuinely valuable.** The Arch and RPM packages are built on Debian and their dependency lists have never been verified against a real Arch or Fedora. If you run either, installing the package and reporting what breaks is one of the most useful things you can do.
+
+**Adding settings needs no Python.** The whole catalogue is TOML in `data/catalogue/` — 25 files. A new setting is a handful of lines describing what it does, what it breaks, and how risky it is. Run `python3 tools/audit-targets.py` afterwards: it checks that the file we'd write is actually read by the tool that's supposed to read it, that it sorts last so our values win, and that the output passes that tool's own validator.
+
+**Also open:** the `recommended` preset is currently generated — every flag rated `safe`, which is 427 settings. That's not a recommendation, it's "everything we were fairly sure wouldn't break". A curated, genuinely small `recommended` would be a real improvement.
+
+### Before you open a PR
+
+```bash
+python3 -m unittest discover -s tests   # 234 tests, must stay green
+python3 tools/audit-targets.py          # if you touched any target path
+./tools/packaging-gate.sh               # if you touched packaging
+```
+
+There's no CI yet, so please run the suite locally. Two conventions worth knowing: modules directly under `src/ossgui/` are stdlib-only so the privileged helper can import them, and comments here explain **why** rather than what — usually naming the specific failure that motivated the code, because most of this codebase exists to stop something silent from happening again.
+
+Anything touching the privileged helper or the transaction gets read closely, and a change there wants a test that fails without it. Bug reports are contributions too — especially with the Apply-failed detail, which is copyable.
+
 ---
 
 ## Licence
@@ -275,6 +319,7 @@ The bundled typefaces are under the SIL Open Font License 1.1; Cormorant Garamon
 | | |
 |---|---|
 | Repository | https://github.com/jegly/OSS |
+| Releases | https://github.com/jegly/OSS/releases |
 | Issues | https://github.com/jegly/OSS/issues |
 | Manual page | `man oss` |
 | Cormorant Garamond | https://github.com/CatharsisFonts/Cormorant |
