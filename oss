@@ -3,8 +3,10 @@
 
 import sys
 
-# Installed layout; harmless in the dev tree where the package is found first.
-sys.path.insert(0, "/usr/share/oss")
+# Installed layout. Appended, not inserted at the front: insert(0) put the
+# installed copy ahead of PYTHONPATH, so running from the dev tree on a
+# machine with the package installed silently launched the *old* code.
+sys.path.append("/usr/share/oss")
 
 import gi
 

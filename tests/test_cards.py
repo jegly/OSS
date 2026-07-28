@@ -93,5 +93,79 @@ class TestEditableFlagCard(unittest.TestCase):
                 self.assertEqual(staging.value(flag_id), "alice bob")
 
 
+@unittest.skipUnless(_HAS_DISPLAY, "GTK widgets need a display")
+class TestSwitchShowsLiveState(unittest.TestCase):
+    """The switch is "is this setting on", not "has this app staged it".
+
+    On a hand-hardened machine, hundreds of settings are in effect from the
+    user's own files: the counter said "281 in effect" while every switch sat
+    off, which users rightly reported as a bug.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        import gi
+
+        gi.require_version("Gtk", "4.0")
+        gi.require_version("Adw", "1")
+        from gi.repository import Adw
+
+        Adw.init()
+        from ossgui import probe
+        from ossgui.probe import FlagState, State
+        from ossgui.staging import Staging
+        from ossgui.ui.cards import FlagCard
+
+        cls.FlagCard = FlagCard
+        cls.Staging = Staging
+        cls.FlagState = FlagState
+        cls.State = State
+        cls.catalogue = catalogue.load()
+        cls.facts = probe.gather(cls.catalogue)
+
+    def card(self, flag_id: str, state=None):
+        staging = self.Staging(catalogue=self.catalogue)
+        flag = self.catalogue.get(flag_id)
+        section = self.catalogue.section(flag.section)
+        return self.FlagCard(flag, section, staging, state), staging
+
+    def live(self, flag_id: str):
+        flag = self.catalogue.get(flag_id)
+        return self.FlagState(flag_id, self.State.APPLIED, live=flag.value)
+
+    def test_a_live_unstaged_setting_shows_on(self) -> None:
+        card, staging = self.card("kptr_restrict", self.live("kptr_restrict"))
+        self.assertTrue(card.switch.get_active())
+        self.assertFalse(staging.is_set("kptr_restrict"))
+
+    def test_a_not_set_unstaged_setting_shows_off(self) -> None:
+        state = self.FlagState("kptr_restrict", self.State.NOT_SET)
+        card, _ = self.card("kptr_restrict", state)
+        self.assertFalse(card.switch.get_active())
+
+    def test_switching_off_an_unmanaged_live_setting_is_vetoed(self) -> None:
+        card, staging = self.card("kptr_restrict", self.live("kptr_restrict"))
+        self.assertTrue(card._on_switch(card.switch, False), "flip was not vetoed")
+        self.assertFalse(staging.is_set("kptr_restrict"))
+        self.assertFalse(staging.is_changed("kptr_restrict"))
+
+    def test_switching_off_an_app_owned_setting_stages_the_removal(self) -> None:
+        flag = self.catalogue.get("kptr_restrict")
+        staging = self.Staging(
+            catalogue=self.catalogue,
+            selection={"kptr_restrict": flag.value},
+            baseline={"kptr_restrict": flag.value},
+        )
+        section = self.catalogue.section(flag.section)
+        card = self.FlagCard(flag, section, staging, self.live("kptr_restrict"))
+
+        self.assertFalse(card._on_switch(card.switch, False), "unstage was vetoed")
+        self.assertFalse(staging.is_set("kptr_restrict"))
+        self.assertTrue(staging.is_changed("kptr_restrict"), "no removal staged")
+        # And the switch shows the staged intent, not the still-live value.
+        card.refresh()
+        self.assertFalse(card.switch.get_active())
+
+
 if __name__ == "__main__":
     unittest.main()

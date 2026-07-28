@@ -38,6 +38,7 @@ class OssApplication(Adw.Application):
             ("about", self._on_about),
             ("appearance", self._on_appearance),
             ("capture", self._on_capture),
+            ("backup", self._on_backup),
             ("save-preset", self._on_save_preset),
             ("clear-preset", self._on_clear_preset),
         ):
@@ -144,6 +145,11 @@ class OssApplication(Adw.Application):
         from .capture_dialog import CaptureDialog
 
         CaptureDialog(self.window).present()
+
+    def _on_backup(self, *_args) -> None:
+        from .backup_dialog import BackupDialog
+
+        BackupDialog(self.window).present()
 
     def _on_clear_preset(self, *_args) -> None:
         """Unload the preset and drop every staged change.

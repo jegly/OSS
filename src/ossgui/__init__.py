@@ -4,4 +4,4 @@
 under this package are stdlib-only so the privileged helper can share them.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

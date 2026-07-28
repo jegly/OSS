@@ -12,7 +12,7 @@
 # so every package installs the helper to the same place.
 
 pkgname=oss
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=1
 pkgdesc="Pick hardening flags, review the diff, apply once — a GTK4 control centre for Linux hardening"
 arch=('any')

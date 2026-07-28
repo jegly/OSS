@@ -19,15 +19,18 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from . import accounts as accounts_module
+from . import backup as backup_module
 from . import apparmor as apparmor_module
 from . import bootloader as bootloader_module
 from . import filemode as filemode_module
@@ -95,6 +98,8 @@ def progress(text: str) -> None:
     exactly like a hang. Anything that can take more than a moment reports
     before it starts, not after it finishes.
     """
+    if os.environ.get("OSS_QUIET"):
+        return
     print(f"{PROGRESS_PREFIX}{text}", file=sys.stderr, flush=True)
 
 
@@ -341,6 +346,96 @@ def _validate_auditd(write: render.FileWrite, result: Result) -> None:
         candidate.unlink(missing_ok=True)
 
 
+def _is_sysctl_reload(argv: tuple[str, ...] | list[str]) -> bool:
+    return bool(argv) and Path(argv[0]).name == "sysctl" and "--system" in argv
+
+
+def _sysctl_error_lines(output: str) -> list[str]:
+    """The lines of `sysctl --system` output that report failures.
+
+    Its output is `* Applying <file> ...` headers and `key = value` echoes of
+    what was set; anything else is an error report (cannot stat, permission
+    denied on key, invalid argument).
+    """
+    errors = []
+    for line in output.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("* Applying"):
+            continue
+        if " = " in stripped and not stripped.startswith("sysctl:"):
+            continue
+        errors.append(stripped)
+    return errors
+
+
+def _plan_sysctl_keys(plan: render.Plan) -> set[str]:
+    """Every sysctl key the plan's own file writes carry."""
+    keys: set[str] = set()
+    for write in plan.writes:
+        if "sysctl" not in write.path:
+            continue
+        for line in write.content.splitlines():
+            line = line.strip()
+            if not line or line.startswith(("#", ";")) or "=" not in line:
+                continue
+            key = line.split("=", 1)[0].strip()
+            if key:
+                keys.add(key)
+    return keys
+
+
+#: How procps' sysctl names the key in a per-key error: as a /proc/sys path
+#: ("cannot stat /proc/sys/net/ipv4/…") or quoted ("permission denied on key
+#: 'net.ipv6.…'", 'setting key "…"').
+_SYSCTL_ERROR_KEY = (
+    re.compile(r"/proc/sys/([^\s:]+)"),
+    re.compile(r"key [\"'](.+?)[\"']"),
+)
+
+
+def _sysctl_error_key(line: str) -> str | None:
+    for pattern in _SYSCTL_ERROR_KEY:
+        match = pattern.search(line)
+        if match:
+            return match.group(1).replace("/", ".")
+    return None
+
+
+def _sysctl_reload_verdict(plan: render.Plan, output: str) -> tuple[bool, str]:
+    """Decide whether a non-zero `sysctl --system` is *our* failure.
+
+    `sysctl --system` re-applies every sysctl file on the machine — vendor
+    files, /etc/sysctl.conf, anything a hand-hardened box already carries — and
+    exits 1 if any single key anywhere fails (an interface that is currently
+    down, a key this kernel does not have). Failing the whole transaction and
+    rolling back over a file this app never wrote punishes the user for their
+    own pre-existing config.
+
+    Tolerated only when every error line is a per-key error naming a key this
+    plan does not write: an error we cannot attribute (a wholesale failure, a
+    key of ours) still fails the transaction, and the read-back step
+    independently verifies our keys took either way.
+
+    Returns ``(ours, detail)``: whether to fail the transaction, and the error
+    lines worth reporting instead of the full per-key echo.
+    """
+    errors = _sysctl_error_lines(output)
+    if not errors:
+        return True, output
+    ours = _plan_sysctl_keys(plan)
+    for line in errors:
+        key = _sysctl_error_key(line)
+        if key is None or key in ours:
+            return True, "\n".join(errors)
+    detail = (
+        "sysctl --system exited non-zero, but every failing key comes from a "
+        "file this app did not write — something already on this machine does "
+        "not apply cleanly. The keys this app manages are verified separately "
+        "by the read-back step.\n" + "\n".join(errors[:12])
+    )
+    return False, detail
+
+
 # --------------------------------------------------------------------------- #
 #  The transaction
 # --------------------------------------------------------------------------- #
@@ -405,11 +500,19 @@ def apply_plan(
                 touched.append(path)
                 result.steps.append(Step("remove", removal.path))
 
-        # 3. Reload. An exit code here means the system rejected our work.
+        # 3. Reload. An exit code here means the system rejected our work —
+        #    except `sysctl --system`, which re-applies files we never wrote
+        #    and can fail on a pre-existing key that is not ours to answer for.
         for index, command in enumerate(plan.commands, 1):
             progress(f"{command.why or str(command)}  ({index} of {len(plan.commands)})")
             code, output = run(command.argv)
             ok = code == 0
+            if not ok and _is_sysctl_reload(command.argv):
+                ours, detail = _sysctl_reload_verdict(plan, output)
+                if not ours:
+                    result.steps.append(Step("command", str(command), True, detail))
+                    continue
+                output = detail
             result.steps.append(Step("command", str(command), ok, output))
             if not ok:
                 raise ApplyError(f"{command} failed with exit {code}: {output}")
@@ -480,7 +583,16 @@ def apply_plan(
         result.error = str(exc)
         result.rolled_back = _rollback(touched, plan, result, prior_units)
         return result
-    except OSError as exc:
+    except Exception as exc:
+        # Deliberately everything, not just OSError. Each of the sub-planners
+        # above raises its own ValueError subclass (UfwError, FstabError) and
+        # apply_permissions resolves names with pwd/grp, which raise KeyError —
+        # none of which used to be caught here. The escape was the worst
+        # possible outcome: files already written stayed written because
+        # _rollback never ran, and the helper died printing a traceback to
+        # stderr with no JSON on stdout, so the GUI could not report what
+        # happened either. A bug anywhere below has to still leave the machine
+        # as it was found.
         result.ok = False
         result.error = f"{type(exc).__name__}: {exc}"
         result.rolled_back = _rollback(touched, plan, result, prior_units)
@@ -845,11 +957,16 @@ def apply_permissions(changes: list, result: Result) -> None:
         )
 
         if change.owner or change.group:
-            import grp as grp_module
-            import pwd as pwd_module
-
-            uid = pwd_module.getpwnam(change.owner).pw_uid if change.owner else -1
-            gid = grp_module.getgrnam(change.group).gr_gid if change.group else -1
+            # Resolved through permissions.resolve_ownership so a name this
+            # machine does not have becomes an ApplyError — which rolls the
+            # transaction back and tells the user which account is missing —
+            # rather than the bare KeyError getpwnam raises.
+            try:
+                uid, gid = permissions_module.resolve_ownership(
+                    change.owner, change.group
+                )
+            except permissions_module.PermissionError_ as exc:
+                raise ApplyError(str(exc)) from exc
             os.chown(path, uid, gid)
             result.steps.append(
                 Step("write", f"{change.path}: owner -> {change.owner}:{change.group}")
@@ -1016,9 +1133,186 @@ def apply_firewall(wanted: ufw_module.State, result: Result) -> None:
             raise ApplyError(f"{why} failed: {output}")
 
 
+def make_backup(catalogue: Catalogue, payload: dict) -> Result:
+    """Tar every config location this catalogue knows about.
+
+    Runs as root because /etc/sudoers.d is 0440 and unreadable otherwise. Reads
+    only — nothing on the system changes.
+    """
+    destination = payload.get("destination")
+    if not isinstance(destination, str) or not destination:
+        return Result(ok=False, error="no destination given for the backup")
+    parent = Path(destination).parent
+    if not parent.is_dir():
+        return Result(ok=False, error=f"{parent} is not a directory")
+    if Path(destination).is_symlink():
+        # Same rule as write_atomic: this runs as root, and writing through a
+        # link somebody planted would put the archive wherever they liked.
+        return Result(ok=False, error=f"{destination} is a symlink; refusing to write through it")
+
+    locations = payload.get("locations")
+    if locations is not None:
+        # The GUI says *which* of the known locations, never its own paths —
+        # this runs as root, and an arbitrary path here would read anything.
+        if not isinstance(locations, list) or not all(isinstance(p, str) for p in locations):
+            return Result(ok=False, error="locations must be a list of strings")
+        known = set(backup_module.backup_paths(catalogue))
+        unknown = [p for p in locations if p not in known]
+        if unknown:
+            return Result(ok=False, error=f"not backup locations: {', '.join(unknown[:5])}")
+        if not locations:
+            return Result(ok=False, error="nothing selected to back up")
+
+    manifest = backup_module.Manifest(
+        hostname=payload.get("hostname", "") or "",
+        family=probe.detect_family(),
+        distro=probe.distro_name(),
+        created=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        version=payload.get("version", "") or "",
+    )
+
+    result = Result()
+    try:
+        progress("Reading every configuration location")
+        made = backup_module.create(catalogue, destination, manifest, locations=locations)
+    except (backup_module.BackupError, OSError) as exc:
+        return Result(ok=False, error=f"backup failed: {exc}")
+
+    # The archive is root-owned by virtue of who wrote it, which makes it
+    # awkward to carry anywhere. Hand it to whoever asked for it.
+    invoking = os.environ.get("PKEXEC_UID")
+    if invoking is not None:
+        try:
+            os.chown(destination, int(invoking), -1)
+        except (OSError, ValueError):
+            pass
+
+    result.steps.append(Step("backup", destination, True, made.summary()))
+    for skipped in made.skipped:
+        result.steps.append(Step("backup", f"not present: {skipped}", True))
+    result.integrity = {
+        "backup": {
+            "path": made.path,
+            "files": made.files,
+            "skipped": made.skipped,
+            "bytes": made.bytes_written,
+            "summary": made.summary(),
+        }
+    }
+    return result
+
+
+def restore_plan(payload: dict) -> Result:
+    """Read an archive and report what restoring it would change. Writes nothing."""
+    source = payload.get("source")
+    if not isinstance(source, str) or not Path(source).is_file():
+        return Result(ok=False, error="that backup file does not exist")
+
+    try:
+        manifest = backup_module.read_manifest(source)
+        files = backup_module.read_files(source)
+    except (backup_module.BackupError, OSError) as exc:
+        return Result(ok=False, error=f"cannot read that backup: {exc}")
+
+    changes: list[dict] = []
+    for path, (content, mode) in sorted(files.items()):
+        current = None
+        try:
+            current = Path(path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            pass
+        changes.append({
+            "path": path,
+            "content": content,
+            "mode": mode,
+            "current": current,
+            "state": "new" if current is None else ("same" if current == content else "differs"),
+        })
+
+    result = Result()
+    result.integrity = {
+        "restore": {
+            "source": source,
+            "manifest": {
+                "hostname": manifest.hostname,
+                "family": manifest.family,
+                "distro": manifest.distro,
+                "created": manifest.created,
+                "version": manifest.version,
+            },
+            "warning": backup_module.mismatch_warning(
+                manifest, probe.detect_family(), probe.distro_name()
+            ),
+            "changes": changes,
+        }
+    }
+    return result
+
+
+def restore_apply(catalogue: Catalogue, payload: dict) -> Result:
+    """Write the files from an archive, through the ordinary transaction.
+
+    The archive is re-read here rather than trusting a file list from the GUI,
+    for the same reason the helper re-renders the catalogue instead of writing
+    what it is handed: the caller says *which* backup, never what is in it.
+
+    Only the paths the user ticked are written, and every one is checked
+    against the archive again. Backups, reloads and rollback are the same code
+    an ordinary apply uses.
+    """
+    source = payload.get("source")
+    if not isinstance(source, str) or not Path(source).is_file():
+        return Result(ok=False, error="that backup file does not exist")
+
+    wanted = payload.get("paths")
+    if not isinstance(wanted, list) or not all(isinstance(p, str) for p in wanted):
+        return Result(ok=False, error="paths must be a list of strings")
+    if not wanted:
+        return Result(ok=True, error="", steps=[Step("write", "nothing selected", True)])
+
+    try:
+        files = backup_module.read_files(source)
+    except (backup_module.BackupError, OSError) as exc:
+        return Result(ok=False, error=f"cannot read that backup: {exc}")
+
+    plan = Plan()
+    for path in wanted:
+        if path not in files:
+            return Result(ok=False, error=f"{path} is not in that backup")
+        content, mode = files[path]
+        plan.writes.append(
+            render.FileWrite(path=path, content=content, mode=mode, in_place=True,
+                             section="restore")
+        )
+
+    # Reload whatever the restored files belong to, so this takes effect the
+    # same way an apply would rather than waiting for a reboot.
+    reloads: list[tuple[str, ...]] = []
+    for section in catalogue.sections:
+        directories = {os.path.dirname(t) for t in section.targets() if t}
+        touched = any(os.path.dirname(w.path) in directories or w.path in section.targets()
+                      for w in plan.writes)
+        if touched and section.reload and not render.section_skip_reason(section):
+            for command in section.reload:
+                resolved = distro.resolve_command(command)
+                if resolved not in reloads:
+                    reloads.append(resolved)
+    plan.commands.extend(
+        render.Command(argv, f"reload after restore") for argv in reloads
+    )
+
+    return apply_plan(catalogue, plan, {})
+
+
 def run_payload(catalogue: Catalogue, payload: dict) -> Result:
     """Validate a payload, render the plan ourselves, and run it."""
     action = payload.get("action", "apply")
+    if action == "backup":
+        return make_backup(catalogue, payload)
+    if action == "restore-plan":
+        return restore_plan(payload)
+    if action == "restore-apply":
+        return restore_apply(catalogue, payload)
     if action == "read-firewall":
         return read_firewall()
     if action == "read-apparmor":

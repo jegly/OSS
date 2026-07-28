@@ -36,6 +36,11 @@ CHATTR = "/usr/bin/chattr"
 _PATH_OK = re.compile(r"^/[^\0\n]{1,4095}$")
 _NAME_OK = re.compile(r"^[a-z_][a-z0-9_-]{0,31}\$?$")
 
+#: dpkg-statoverride takes an id in place of a name when it is written with a
+#: leading '#' (see its man page). That is the only way to preserve ownership
+#: of a file whose uid has no passwd entry.
+_NUMERIC_ID_OK = re.compile(r"^#\d{1,10}$")
+
 #: Making any of these unreadable or non-executable takes the system with it.
 #: The list is about *consequence*, not about who owns the file.
 PROTECTED = {
@@ -87,6 +92,49 @@ class Target:
     package: str = ""
     #: An existing statoverride, if one is already recorded.
     override: str = ""
+    #: Set when the owning uid/gid has no passwd or group entry, so there is
+    #: no name to show or to hand to dpkg-statoverride.
+    orphan_uid: int | None = None
+    orphan_gid: int | None = None
+
+    @property
+    def owner_label(self) -> str:
+        """What to show for the owner, naming an orphan uid as the number it is."""
+        if self.owner:
+            return self.owner
+        if self.orphan_uid is not None:
+            return f"uid {self.orphan_uid} (no such user)"
+        return ""
+
+    @property
+    def group_label(self) -> str:
+        if self.group:
+            return self.group
+        if self.orphan_gid is not None:
+            return f"gid {self.orphan_gid} (no such group)"
+        return ""
+
+    @property
+    def owner_spec(self) -> str:
+        """What to hand dpkg-statoverride so ownership is *preserved*.
+
+        Defaulting an orphan-owned file to root would quietly change who owns
+        it while the user was only adjusting its mode, which is not what the
+        dialog said it would do.
+        """
+        if self.owner:
+            return self.owner
+        if self.orphan_uid is not None:
+            return f"#{self.orphan_uid}"
+        return "root"
+
+    @property
+    def group_spec(self) -> str:
+        if self.group:
+            return self.group
+        if self.orphan_gid is not None:
+            return f"#{self.orphan_gid}"
+        return "root"
 
     @property
     def packaged(self) -> bool:
@@ -129,14 +177,22 @@ def inspect(path: str) -> Target:
     target.exists = True
     target.mode = stat.st_mode & 0o7777
     target.is_dir = location.is_dir()
+    # An orphan uid — a file left behind by a deleted account, or one from
+    # another machine's numbering — has no name to carry forward. The bare
+    # number used to be stored here as if it were one, and dpkg-statoverride
+    # takes names: the payload validator then rejected it and aborted the
+    # *whole* apply over one file. Recorded separately instead, so the mode
+    # change still goes through and ownership is simply left as it is.
     try:
         target.owner = pwd.getpwuid(stat.st_uid).pw_name
     except KeyError:
-        target.owner = str(stat.st_uid)
+        target.owner = ""
+        target.orphan_uid = stat.st_uid
     try:
         target.group = grp.getgrgid(stat.st_gid).gr_name
     except KeyError:
-        target.group = str(stat.st_gid)
+        target.group = ""
+        target.orphan_gid = stat.st_gid
 
     target.package = _package_for(path)
     target.override = _existing_override(path)
@@ -189,7 +245,7 @@ def validate_mode(mode: int) -> None:
 
 
 def validate_owner(name: str) -> None:
-    if name and not _NAME_OK.match(name):
+    if name and not (_NAME_OK.match(name) or _NUMERIC_ID_OK.match(name)):
         raise ModeError(f"not a usable user or group name: {name!r}")
 
 

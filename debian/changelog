@@ -1,3 +1,25 @@
+oss (0.1.1) unstable; urgency=medium
+
+  * Back up and restore the configuration files themselves, to and from a
+    portable archive, choosing which locations to include on both sides.
+  * Fix the apply dialog freezing after a successful apply.
+  * Report progress during Apply instead of a bare spinner.
+  * Stop reading gsettings as root, where there is no session bus.
+  * Read the firewall rule list on machines with application-profile rules,
+    which previously failed to parse and took the whole section with them.
+  * Remove packages successfully: the removal command carried --no-remove,
+    which aborts on any removal at all.
+  * Roll back on an unexpected error rather than leaving files written, and
+    refuse a permissions change naming an account this machine lacks.
+  * Survive `sysctl --system` failing on keys from files this app did not
+    write, instead of blaming the transaction for the machine's own config.
+  * Show a flag's switch as on when the setting is in effect, however it got
+    that way, rather than only when this app staged it.
+  * Keep the Apply-failed report inside a window that fits on the screen.
+  * Open each section at its top, and make the section navigation strip work.
+
+ -- Jegly <jjjegly@gmail.com>  Tue, 28 Jul 2026 12:45:00 +0000
+
 oss (0.1.0) unstable; urgency=medium
 
   * Initial release.

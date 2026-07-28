@@ -131,6 +131,35 @@ def integrity_check() -> ApplyOutcome:
     return _invoke({"version": 1, "action": "integrity-check"})
 
 
+def make_backup(destination: str, hostname: str = "", version: str = "",
+                locations: list[str] | None = None, on_progress=None) -> ApplyOutcome:
+    """Ask the helper to write a backup archive. Reads only.
+
+    *locations* limits the archive to those backup paths (must be a subset of
+    ``backup.backup_paths()`` — the helper refuses anything else); ``None``
+    takes everything.
+    """
+    payload = {"version": 1, "action": "backup", "destination": destination,
+               "hostname": hostname, "version": version}
+    if locations is not None:
+        payload["locations"] = sorted(locations)
+    return _invoke(payload, on_progress)
+
+
+def restore_plan(source: str) -> ApplyOutcome:
+    """What restoring *source* would change. Writes nothing."""
+    return _invoke({"version": 1, "action": "restore-plan", "source": source})
+
+
+def restore_apply(source: str, paths: list[str], on_progress=None) -> ApplyOutcome:
+    """Write the chosen paths out of *source*, as one rollback-able transaction."""
+    return _invoke(
+        {"version": 1, "action": "restore-apply", "source": source,
+         "paths": sorted(paths)},
+        on_progress,
+    )
+
+
 def apply(
     selection: dict[str, str],
     sections: list[str] | None = None,

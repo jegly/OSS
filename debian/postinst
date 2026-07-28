@@ -1,0 +1,20 @@
+#!/bin/sh
+# Must match the postinst tools/build-deb.sh writes. Local calls only: this
+# package never downloads anything, at install or at run.
+#
+# Without the icon cache refresh the .desktop file names an icon the shell
+# cannot find until the next login, and the app gets a generic dock icon —
+# the same symptom set_prgname() in `oss` exists to avoid.
+set -e
+if [ "$1" = configure ]; then
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        update-desktop-database -q /usr/share/applications || true
+    fi
+    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+        gtk-update-icon-cache -qtf /usr/share/icons/hicolor 2>/dev/null || true
+    fi
+fi
+
+#DEBHELPER#
+
+exit 0

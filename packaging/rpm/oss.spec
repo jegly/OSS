@@ -8,7 +8,7 @@
 #  tarball the Source0 below expects.
 
 Name:           oss
-Version:        0.1.0
+Version:        0.1.1
 Release:        1%{?dist}
 Summary:        Pick hardening flags, review the diff, apply once
 
@@ -138,5 +138,8 @@ find %{buildroot}%{_datadir}/icons -type d -exec chmod 755 {} +
 %{_datadir}/fonts/oss/
 
 %changelog
+* Mon Jul 27 2026 Jegly <jjjegly@gmail.com> - 0.1.1-1
+- Backup and restore; apply dialog fixes.
+
 * Mon Jul 27 2026 Jegly <jjjegly@gmail.com> - 0.1.0-1
 - Initial package.

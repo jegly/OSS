@@ -4,6 +4,13 @@ Anatomy (GUI_MOCKUP.html): toggle (or a dropdown for multi-value flags, or an
 entry for editable ones) · title · one-line desc · the key in small mono · risk
 badge · status dot in the corner. Cards with caution/breaking/one-way risk get a
 coloured border so they are scannable.
+
+The switch shows the setting's *live* state: on when it is in effect, whether
+this app wrote it or the machine's own config did. On a hand-hardened machine
+hundreds of switches read as off otherwise, which users rightly report as a
+bug. Staging is unchanged underneath — displaying a switch as on stages
+nothing, and a setting owned by the user's own files cannot be switched off
+here (the app has no claim on those files; Capture adopts them first).
 """
 
 from __future__ import annotations
@@ -200,9 +207,32 @@ class FlagCard(Gtk.Box):
 
     # -- signal handlers --------------------------------------------------- #
 
+    def _live_on(self) -> bool:
+        """Whether this setting is in effect on the machine right now."""
+        return self.state is not None and self.state.state in (
+            State.APPLIED,
+            State.PENDING_REBOOT,
+        )
+
+    def _toast(self, message: str) -> None:
+        root = self.get_root()
+        if root is not None and hasattr(root, "toast"):
+            root.toast(message)
+
     def _on_switch(self, _switch: Gtk.Switch, active: bool) -> bool:
         if self._updating:
             return False
+        if not active and not self.staging.is_set(self.flag.id) and self._live_on():
+            # In effect, but from the machine's own config — there is nothing
+            # staged to remove, and this app has no claim on the file that set
+            # it. Veto the flip rather than showing an off that means nothing.
+            self._toast(
+                f"{self.flag.title} is set by this machine's own configuration, "
+                "not by this app, so it cannot be switched off here. "
+                "Preset menu → “Capture this system” adopts it so this app "
+                "can manage it."
+            )
+            return True
         if active:
             value = self._current_control_value()
             if self.flag.editable and not self.flag.value_is_allowed(value):
@@ -263,9 +293,18 @@ class FlagCard(Gtk.Box):
         self._updating = True
         try:
             staged = self.staging.is_set(self.flag.id)
-            self.switch.set_active(staged)
+            # The switch reads as "is this setting on", not "has this app
+            # staged it" — so a setting in effect from the machine's own
+            # config shows on too (see the module docstring). The exception
+            # is a staged removal: the user just switched an app-owned flag
+            # off, and snapping back to live-on would erase their intent.
+            removal_staged = not staged and self.staging.is_changed(self.flag.id)
+            self.switch.set_active(staged or (self._live_on() and not removal_staged))
 
             value = self.staging.value(self.flag.id)
+            if value is None and self._live_on() and self.state is not None:
+                # Unstaged but live: show the value the machine is running.
+                value = self.state.live
             if self.flag.is_choice and value in self.flag.values:
                 self.dropdown.set_selected(self.flag.values.index(value))
             elif self.flag.editable and value is not None:

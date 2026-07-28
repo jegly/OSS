@@ -9,6 +9,11 @@ override_dh_auto_build:
 override_dh_auto_test:
 	python3 -m unittest discover -s tests
 
+# Must install exactly what tools/build-deb.sh installs. They diverged once:
+# this target shipped no icons, so a dpkg-buildpackage build had a .desktop
+# naming an icon theme entry that was not in the package, and the shell fell
+# back to a generic dock icon — the very thing set_prgname() in `oss` exists
+# to prevent. Anything added to one path belongs in the other.
 override_dh_auto_install:
 	install -d debian/oss/usr/share/oss
 	cp -r src/ossgui debian/oss/usr/share/oss/
@@ -20,6 +25,13 @@ override_dh_auto_install:
 	        debian/oss/usr/share/polkit-1/actions/com.jegly.OSS.policy
 	install -D -m 0644 data/desktop/com.jegly.OSS.desktop \
 	        debian/oss/usr/share/applications/com.jegly.OSS.desktop
+	install -D -m 0644 docs/oss.1 debian/oss/usr/share/man/man1/oss.1
+	install -d debian/oss/usr/share/fonts/oss
+	install -m 0644 data/fonts/*.ttf debian/oss/usr/share/fonts/oss/
+	if [ -d data/icons ]; then \
+	        install -d debian/oss/usr/share/icons; \
+	        cp -r data/icons/hicolor debian/oss/usr/share/icons/; \
+	fi
 	install -d debian/oss/usr/share/oss
 	cp -r data/catalogue data/presets data/themes \
 	        debian/oss/usr/share/oss/

@@ -108,6 +108,81 @@ To                         Action      From
         self.assertFalse(any(r.port == "Status:" for r in rules))
 
 
+class TestApplicationProfileRules(unittest.TestCase):
+    """`ufw allow CUPS` prints a profile name where a port would be.
+
+    That name used to land in to_addr, which made the Rule fail its own
+    validate() as "not an address or subnet: 'CUPS'". Every consequence was
+    bad: the privileged read of the rule list failed outright, so the firewall
+    page could never show rules on a machine with an app-profile rule; and if a
+    payload got past that, plan_commands raised UfwError out of the middle of an
+    apply — a ValueError, which apply_plan did not catch — with the files
+    already written and no rollback.
+    """
+
+    SAMPLE = """Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), disabled (routed)
+New profiles: skip
+
+To                         Action      From
+--                         ------      ----
+22/tcp                     ALLOW IN    Anywhere
+CUPS                       ALLOW IN    Anywhere
+22/tcp (v6)                ALLOW IN    Anywhere (v6)
+"""
+
+    def test_profile_name_is_not_read_as_an_address(self) -> None:
+        rules = ufw.parse_status(self.SAMPLE)
+        cups = next(r for r in rules if r.app)
+        self.assertEqual(cups.app, "CUPS")
+        self.assertEqual(cups.to_addr, "any")
+        self.assertFalse(cups.managed)
+
+    def test_every_parsed_rule_passes_its_own_validation(self) -> None:
+        # The invariant that was broken: a parser must not emit model objects
+        # that its own validate() rejects.
+        for rule in ufw.parse_status(self.SAMPLE):
+            with self.subTest(rule=rule.summary):
+                rule.validate()
+
+    def test_payload_round_trip_survives_a_profile_rule(self) -> None:
+        state = ufw.State(rules_loaded=True, rules=ufw.parse_status(self.SAMPLE))
+        rebuilt = ufw.from_payload(ufw.to_payload(state))
+        self.assertEqual([r.key() for r in rebuilt.rules],
+                         [r.key() for r in state.rules])
+
+    def test_no_command_is_built_for_a_profile_rule(self) -> None:
+        """Neither added nor deleted — the ports behind the name are not ours."""
+        current = ufw.State(rules_loaded=True, rules=ufw.parse_status(self.SAMPLE))
+        wanted = current.copy()
+        wanted.rules = [r for r in current.rules if not r.app]
+        self.assertEqual(ufw.plan_commands(current, wanted), [])
+
+    def test_other_changes_still_plan_alongside_a_profile_rule(self) -> None:
+        current = ufw.State(rules_loaded=True, rules=ufw.parse_status(self.SAMPLE))
+        wanted = current.copy()
+        wanted.rules = list(current.rules) + [ufw.Rule("deny", "in", "23", "tcp")]
+        commands = [" ".join(argv) for argv, _why in ufw.plan_commands(current, wanted)]
+        self.assertTrue(any("23/tcp" in c for c in commands))
+        self.assertFalse(any("CUPS" in c for c in commands))
+
+    def test_to_argv_refuses_rather_than_guessing(self) -> None:
+        with self.assertRaises(ufw.UfwError):
+            ufw.Rule("allow", "in", app="CUPS").to_argv()
+
+    def test_a_real_address_is_still_an_address(self) -> None:
+        output = (
+            "To                         Action      From\n"
+            "--                         ------      ----\n"
+            "192.168.1.5                ALLOW IN    Anywhere\n"
+        )
+        rule = ufw.parse_status(output)[0]
+        self.assertEqual(rule.to_addr, "192.168.1.5")
+        self.assertEqual(rule.app, "")
+        self.assertTrue(rule.managed)
+
+
 class TestPlanning(unittest.TestCase):
     def test_policy_change_emits_one_command(self) -> None:
         current = ufw.State(default_incoming="allow")
@@ -206,6 +281,23 @@ class TestUnits(unittest.TestCase):
         for name in ("dbus.service", "systemd-logind.service", "sysinit.target"):
             with self.assertRaises(units.UnitError, msg=name):
                 units.to_argv(name, "mask")
+
+    def test_refuses_to_disable_a_unit_the_system_needs(self) -> None:
+        """`disable --now` stops the unit too, so the guard cannot be mask-only.
+
+        Refusing the mask but allowing the disable left the same outcome —
+        logind or dbus stopped underneath a live session — one action away.
+        """
+        from ossgui import units
+        for name in ("dbus.service", "systemd-logind.service", "systemd-journald.service"):
+            with self.assertRaises(units.UnitError, msg=name):
+                units.to_argv(name, "disable")
+
+    def test_an_ordinary_unit_can_still_be_disabled(self) -> None:
+        from ossgui import units
+        argv = units.to_argv("cups.service", "disable")
+        self.assertIn("--now", argv)
+        self.assertIn("cups.service", argv)
 
     def test_rejects_shell_metacharacters_in_a_unit_name(self) -> None:
         from ossgui import units
@@ -346,6 +438,20 @@ class TestPackages(unittest.TestCase):
         self.assertNotIn("--allow-remove-essential", argv)
         self.assertEqual(argv[-1], "cowsay")
 
+    def test_removal_command_does_not_disable_removing(self) -> None:
+        """--no-remove aborts every removal, including the requested one.
+
+        It reads like a cascade guard but means "abort if anything would be
+        removed", so apt answered `E: Packages need to be removed but remove is
+        disabled.` and the section could never remove anything. The actual
+        cascade guard is from_payload's re-simulation as root.
+        """
+        from ossgui import packages
+        self.assertNotIn("--no-remove", packages.to_argv(["cowsay"]))
+        self.assertNotIn("--no-remove", packages.to_argv(["cowsay"], purge=True))
+        argv, _why = packages.plan_commands(["cowsay"])[0]
+        self.assertNotIn("--no-remove", argv)
+
     def test_refuses_an_empty_removal(self) -> None:
         from ossgui import packages
         with self.assertRaises(packages.PackageError):
@@ -435,6 +541,68 @@ class TestFileMode(unittest.TestCase):
         from ossgui import filemode
         with self.assertRaises(filemode.ModeError):
             filemode.statoverride_argv("/usr/bin/ssh", 0o644, owner="root; id")
+
+
+class TestOrphanOwnership(unittest.TestCase):
+    """A file whose uid has no passwd entry must not break the whole apply.
+
+    inspect() used to store the bare number as if it were a user name. The
+    mode dialog staged it, and the payload validator then rejected it — which
+    aborts the *entire* transaction, not just that one row, over a file the
+    user only wanted to chmod.
+    """
+
+    def target(self, uid: int | None, gid: int | None = None):
+        from ossgui import filemode
+        return filemode.Target(
+            path="/srv/thing", exists=True, mode=0o644,
+            owner="" if uid is not None else "root",
+            group="" if gid is not None else "root",
+            orphan_uid=uid, orphan_gid=gid,
+        )
+
+    def test_an_orphan_uid_is_shown_as_a_number_not_a_name(self) -> None:
+        target = self.target(1001, 1001)
+        self.assertIn("1001", target.owner_label)
+        self.assertIn("no such user", target.owner_label)
+        self.assertIn("no such group", target.group_label)
+
+    def test_ownership_is_preserved_rather_than_defaulted_to_root(self) -> None:
+        # Chowning to root would silently change who owns the file while the
+        # user was only adjusting its mode.
+        target = self.target(1001, 2002)
+        self.assertEqual(target.owner_spec, "#1001")
+        self.assertEqual(target.group_spec, "#2002")
+
+    def test_a_named_owner_is_unchanged(self) -> None:
+        from ossgui import filemode
+        target = filemode.Target(path="/srv/thing", owner="alice", group="alice")
+        self.assertEqual(target.owner_spec, "alice")
+        self.assertEqual(target.group_spec, "alice")
+
+    def test_the_numeric_form_survives_validation_and_reaches_dpkg(self) -> None:
+        from ossgui import filemode
+        argv = filemode.statoverride_argv("/srv/thing", 0o644, owner="#1001", group="#1001")
+        self.assertIn("#1001", argv)
+
+    def test_a_payload_with_an_orphan_id_is_accepted(self) -> None:
+        from ossgui import filemode
+        changes = filemode.from_payload({
+            "/srv/thing": {"mode": 0o644, "owner": "#1001", "group": "#1001"}
+        })
+        self.assertEqual(changes[0].owner, "#1001")
+
+    def test_a_bare_number_is_still_refused(self) -> None:
+        """Only the '#' form means "an id"; a bare number is a malformed name."""
+        from ossgui import filemode
+        with self.assertRaises(filemode.ModeError):
+            filemode.validate_owner("1001")
+
+    def test_injection_through_the_numeric_form_is_refused(self) -> None:
+        from ossgui import filemode
+        for bad in ("#1001; id", "#", "#abc", "#12345678901234567890"):
+            with self.assertRaises(filemode.ModeError, msg=bad):
+                filemode.validate_owner(bad)
 
     def test_directory_meanings_differ_from_files(self) -> None:
         """Execute on a directory is traversal, not 'run'. Getting this wrong is

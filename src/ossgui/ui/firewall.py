@@ -289,6 +289,17 @@ class FirewallPage(Gtk.Box):
         row = Adw.ActionRow(title=rule.summary)
         if rule.comment:
             row.set_subtitle(GLib.markup_escape_text(rule.comment))
+        if not rule.managed:
+            # No delete button on an application-profile rule. Staging one for
+            # removal would drop it from the list and then emit no command,
+            # which reads as a change that silently did not happen.
+            row.set_subtitle(
+                f"Application profile — the ports behind “{rule.app}” are the "
+                f"profile's to define. Change it with "
+                f"“ufw delete {rule.action} {rule.app}”."
+            )
+            row.set_subtitle_lines(3)
+            return row
         remove = Gtk.Button(icon_name="user-trash-symbolic", valign=Gtk.Align.CENTER)
         remove.add_css_class("flat")
         remove.set_tooltip_text("Stage this rule for removal")

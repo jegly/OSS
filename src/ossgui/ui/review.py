@@ -793,8 +793,14 @@ class ApplyProgressDialog(Adw.Window):
         heading = Gtk.Label(label=title, xalign=0)
         heading.add_css_class("title-2")
         text.append(heading)
-        subtitle = Gtk.Label(label=description, xalign=0, wrap=True)
+        # Clamped for the same reason as _row (see SUBTITLE_LINES): a wrapped
+        # label's minimum height is its full text, and the banner sits outside
+        # the scroller — a long error here (sysctl --system echoes every key)
+        # grows the window's minimum size past the screen, unresizably. The
+        # full text goes in the scrollable details below instead.
+        subtitle = Gtk.Label(label=_clamp(description, lines=4, chars=500), xalign=0, wrap=True)
         subtitle.add_css_class("dim-label")
+        subtitle.set_selectable(True)
         text.append(subtitle)
         banner.append(text)
 
@@ -828,6 +834,22 @@ class ApplyProgressDialog(Adw.Window):
 
     def _details_view(self, outcome: privileged.ApplyOutcome, user_results: list) -> Gtk.Widget:
         page = Adw.PreferencesPage()
+
+        if not outcome.ok and outcome.error:
+            # The banner shows a clamped summary; the whole error lives here,
+            # where it can scroll and be selected instead of sizing the window.
+            group = Adw.PreferencesGroup(title="Why it failed")
+            error_label = Gtk.Label(label=outcome.error, xalign=0, wrap=True)
+            error_label.set_selectable(True)
+            error_label.add_css_class("monospace")
+            error_label.set_margin_top(6)
+            error_label.set_margin_bottom(6)
+            error_label.set_margin_start(10)
+            error_label.set_margin_end(10)
+            holder = Adw.PreferencesRow(activatable=False, selectable=False)
+            holder.set_child(error_label)
+            group.add(holder)
+            page.add(group)
 
         skipped = [k for k, v in outcome.outcomes.items() if v == "skipped"]
         if skipped:

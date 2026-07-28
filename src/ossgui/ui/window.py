@@ -34,6 +34,7 @@ BADGE_DRIFT = "◍"
 
 FILTERS = [
     ("changed", "Only flags you have changed"),
+    ("in effect", "Already in effect on this machine, however it got that way"),
     ("drift", "Live value disagrees with our file"),
     ("needs reboot", "Takes effect after a reboot"),
     ("one-way", "Cannot be undone once applied"),
@@ -202,7 +203,12 @@ class MainWindow(Adw.ApplicationWindow):
         self.header.pack_start(self.search_entry)
         self.header.pack_start(self._build_filter_menu())
 
-        self.counter = Gtk.Label(label="")
+        # A button, not a label: "280 in effect" begs the question *which* 280,
+        # and clicking is the obvious way to ask. It opens the Overview with
+        # the matching filter on.
+        self.counter = Gtk.Button(label="")
+        self.counter.add_css_class("flat")
+        self.counter.connect("clicked", self._on_counter_clicked)
         self.header.pack_end(self._menu_button())
         self.header.pack_end(self.counter)
 
@@ -348,6 +354,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         actions = Gio.Menu()
         actions.append("Capture this system…", "app.capture")
+        actions.append("Back up / restore your config files…", "app.backup")
         actions.append("Save selection as preset…", "app.save-preset")
         menu.append_section(None, actions)
         return menu
@@ -355,6 +362,19 @@ class MainWindow(Adw.ApplicationWindow):
     # ------------------------------------------------------------------ #
     #  Section rendering
     # ------------------------------------------------------------------ #
+
+    def show_section(self, section_id: str) -> None:
+        """Navigate to a section from outside the sidebar (dashboard rows)."""
+        self._show_section(section_id)
+
+    def show_filtered(self, filter_name: str) -> None:
+        """Open the Overview with exactly one filter active."""
+        for name, check in self.filter_buttons.items():
+            check.set_active(name == filter_name)
+        self._show_section(OVERVIEW)
+
+    def _on_counter_clicked(self, _button: Gtk.Button) -> None:
+        self.show_filtered("changed" if self._staged_count() else "in effect")
 
     def _on_sidebar_selected(self, _list: Gtk.ListBox, row: Gtk.ListBoxRow | None) -> None:
         if row is None or not hasattr(row, "section_id"):
@@ -380,6 +400,11 @@ class MainWindow(Adw.ApplicationWindow):
     def _show_section(self, section_id: str) -> None:
         self.current_section = section_id
         self._sync_sidebar_selection(section_id)
+        # A new section starts at its top. The adjustment otherwise keeps the
+        # previous section's position, so leaving sysctl.d from its bottom
+        # opened the next section already scrolled to *its* bottom — footer
+        # strip first, content seemingly missing above.
+        self.scroller.get_vadjustment().set_value(0)
         child = self.grid_box.get_first_child()
         while child is not None:
             nxt = child.get_next_sibling()
@@ -563,26 +588,40 @@ class MainWindow(Adw.ApplicationWindow):
         return status
 
     def _section_footer_strip(self, section_id: str) -> Gtk.Widget:
-        """`namespaces / apparmor · network · 19 more in this section` (mockup)."""
-        strip = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        """A table of contents for the section, sitting under its last group.
+
+        Every group gets a button, wrapping onto further lines when they do
+        not fit. The mockup's `first three · N more in this section` is gone
+        deliberately: at the bottom of the page, "N more" read as content that
+        exists but cannot be reached — "why can't I keep scrolling?" — when
+        everything is in fact above, and these are shortcuts back up to it.
+        """
+        strip = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         strip.add_css_class("section-footer")
         strip.set_margin_top(4)
 
+        row = Gtk.FlowBox()
+        row.set_selection_mode(Gtk.SelectionMode.NONE)
+        row.set_column_spacing(2)
+        row.set_row_spacing(2)
+        row.set_max_children_per_line(20)
+
+        jump = Gtk.Label(label="jump back up to:")
+        jump.add_css_class("dim-label")
+        jump.add_css_class("caption")
+        jump.set_valign(Gtk.Align.CENTER)
+        row.append(jump)
+
         section = self.catalogue.section(section_id)
-        groups = section.group_order
-        for index, group in enumerate(groups[:3]):
-            if index:
-                strip.append(Gtk.Label(label="·"))
+        for group in section.group_order:
             button = Gtk.Button(label=group)
             button.add_css_class("flat")
             button.connect("clicked", self._on_jump_to_group, group)
-            strip.append(button)
-        if len(groups) > 3:
-            more = Gtk.Label(label=f"{len(groups) - 3} more in this section")
-            more.add_css_class("dim-label")
-            strip.append(more)
+            row.append(button)
+        strip.append(row)
 
-        strip.append(Gtk.Box(hexpand=True))
+        legend_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        legend_row.append(Gtk.Box(hexpand=True))
         for glyph, text, css in (
             ("●", "applied", "status-applied"),
             ("◐", "reboot", "status-pending-reboot"),
@@ -591,14 +630,30 @@ class MainWindow(Adw.ApplicationWindow):
             legend = Gtk.Label(label=f"{glyph} {text}")
             legend.add_css_class(css)
             legend.add_css_class("caption")
-            strip.append(legend)
+            legend_row.append(legend)
+        strip.append(legend_row)
         return strip
 
     def _on_jump_to_group(self, _button: Gtk.Button, group: str) -> None:
+        self._scroll_to_group(group)
+
+    def _scroll_to_group(self, group: str) -> None:
+        """Scroll the content pane so this group's header is at the top.
+
+        grab_focus() looked like it did this, but a GroupHeader is a plain
+        Gtk.Box — not focusable — so the call failed silently and the buttons
+        in the footer strip did nothing at all.
+        """
         for header in self._group_headers:
-            if header.group == group:
-                header.grab_focus()
-                break
+            if header.group != group:
+                continue
+            # Bounds relative to the viewport are relative to what is on
+            # screen, so the header's y is the distance to scroll by.
+            found, rect = header.compute_bounds(self.scroller.get_child())
+            if found:
+                adjustment = self.scroller.get_vadjustment()
+                adjustment.set_value(adjustment.get_value() + rect.get_y() - 8)
+            break
 
     # ------------------------------------------------------------------ #
     #  Filtering
@@ -614,6 +669,11 @@ class MainWindow(Adw.ApplicationWindow):
 
         state = self.states.get(flag.id)
         if "changed" in self.active_filters and not self.staging.is_changed(flag.id):
+            return False
+        if "in effect" in self.active_filters and (
+            state is None
+            or state.state not in (State.APPLIED, State.PENDING_REBOOT)
+        ):
             return False
         if "drift" in self.active_filters and (
             state is None or state.state is not State.DIFFERS
@@ -717,8 +777,8 @@ class MainWindow(Adw.ApplicationWindow):
         except ufw_module.UfwError:
             return []
 
-    def _refresh_chrome(self) -> None:
-        count = (
+    def _staged_count(self) -> int:
+        return (
             self.staging.changed_count
             + len(self.firewall_changes())
             + len(self.unit_changes)
@@ -735,12 +795,16 @@ class MainWindow(Adw.ApplicationWindow):
             + sum(len(groups) for groups in self.account_remove_member.values())
             + (1 if self.bootloader_change else 0)
         )
+
+    def _refresh_chrome(self) -> None:
+        count = self._staged_count()
         if count:
             self.counter.set_label(f"{count} changed")
             self.counter.add_css_class("changed-counter")
             self.counter.remove_css_class("dim-label")
             self.counter.set_tooltip_text(
-                "Changes staged but not yet written. Review shows the exact diff."
+                "Changes staged but not yet written. Review shows the exact "
+                "diff. Click to see which flags."
             )
         else:
             # Nothing staged. Showing "0 changed" on a machine that is already
@@ -756,7 +820,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.counter.add_css_class("dim-label")
             self.counter.set_tooltip_text(
                 "Settings already in effect on this machine, however they got "
-                "that way. Nothing is staged to change."
+                "that way. Nothing is staged to change. Click to see which."
             )
         self.apply_button.set_sensitive(count > 0)
         self.review_button.set_sensitive(count > 0)

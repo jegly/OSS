@@ -116,7 +116,7 @@ class ModeDialog(Adw.Window):
             title=self.target.path if self.target else "Nothing chosen yet",
             subtitle=(
                 f"{self.target.mode_octal}  {self.target.mode_symbolic}  "
-                f"{self.target.owner}:{self.target.group}"
+                f"{self.target.owner_label}:{self.target.group_label}"
                 + ("  (folder)" if self.target.is_dir else "")
                 if self.target and self.target.exists
                 else "Choose a file or a folder to see its current permissions."
@@ -409,8 +409,8 @@ class ModeDialog(Adw.Window):
 
         self.window.filemode_changes[self.target.path] = {
             "mode": self.mode,
-            "owner": self.target.owner or "root",
-            "group": self.target.group or "root",
+            "owner": self.target.owner_spec,
+            "group": self.target.group_spec,
             "durable": self.durable_row.get_active(),
             "immutable": self.immutable_row.get_active(),
         }

@@ -27,6 +27,8 @@ UFW_BIN = "/usr/sbin/ufw"
 
 _PORT = re.compile(r"^\d{1,5}(:\d{1,5})?$")
 _COMMENT = re.compile(r"^[A-Za-z0-9 ._:/()-]{0,64}$")
+#: An application profile name as ufw prints it ("CUPS", "OpenSSH", "Samba").
+_APP_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,63}$")
 _CONF_LINE = re.compile(r"^\s*([A-Z_0-9]+)\s*=\s*\"?([^\"#]*)\"?")
 
 
@@ -52,6 +54,21 @@ class Rule:
     comment: str = ""
     #: True when ufw reported this rule as (v6) — the IPv6 half of a pair.
     v6: bool = False
+    #: The application profile this rule was written against ("CUPS", "OpenSSH"),
+    #: for rules `ufw status` reports by profile name instead of by port. Set
+    #: only by parse_status; a rule this app builds itself never has one.
+    app: str = ""
+
+    @property
+    def managed(self) -> bool:
+        """Whether this app can build a ufw command for this rule.
+
+        An application-profile rule names a profile from /etc/ufw/applications.d
+        rather than a port and an address, and the port set behind that name is
+        the profile's to change. This app neither builds nor deletes those: it
+        shows them so the rule list is the truth, and leaves them alone.
+        """
+        return not self.app
 
     def validate(self) -> None:
         """Reject anything we would not be able to build a safe command from."""
@@ -59,6 +76,13 @@ class Rule:
             raise UfwError(f"unknown action {self.action!r}")
         if self.direction not in DIRECTIONS:
             raise UfwError(f"unknown direction {self.direction!r}")
+        if self.app:
+            # An app-profile rule carries a name where a port and address would
+            # be, so the port/address rules below do not apply to it. It is
+            # still pattern-checked, because it reaches the UI as a label.
+            if not _APP_NAME.match(self.app):
+                raise UfwError(f"not an application profile name: {self.app!r}")
+            return
         if self.proto not in PROTOCOLS:
             raise UfwError(f"unknown protocol {self.proto!r}")
         if self.port and not _PORT.match(self.port):
@@ -80,6 +104,15 @@ class Rule:
     def to_argv(self, delete: bool = False) -> list[str]:
         """The exact ufw invocation for this rule."""
         self.validate()
+        if self.app:
+            # Never guessed. `ufw allow CUPS` expands to whatever the profile
+            # declares today, so re-issuing it is not the same operation as the
+            # one that created the rule, and a wrong delete here would roll the
+            # whole transaction back over a rule the user never touched.
+            raise UfwError(
+                f"{self.app} is an application-profile rule; this app does not "
+                f"build ufw commands for those"
+            )
         argv = [UFW_BIN]
         if delete:
             argv.append("delete")
@@ -102,6 +135,8 @@ class Rule:
 
     @property
     def summary(self) -> str:
+        if self.app:
+            return f"{self.action} {self.direction} {self.app}"
         where = ""
         if self.from_addr != "any":
             where += f" from {self.from_addr}"
@@ -120,6 +155,7 @@ class Rule:
             self.from_addr,
             self.to_addr,
             self.v6,
+            self.app,
         )
 
 
@@ -278,7 +314,7 @@ def parse_status(output: str) -> list[Rule]:
         v6 = "(v6)" in to_field
         to_field = to_field.replace("(v6)", "").strip()
 
-        port, proto, to_addr = "", "any", "any"
+        port, proto, to_addr, app = "", "any", "any", ""
         if "/" in to_field:
             port, _, proto = to_field.partition("/")
             if proto not in PROTOCOLS:
@@ -288,7 +324,19 @@ def parse_status(output: str) -> list[Rule]:
         elif to_field.isdigit() or ":" in to_field and to_field.replace(":", "").isdigit():
             port = to_field
         else:
+            # Neither a port nor an address, so it is an application profile
+            # name — `ufw allow CUPS` prints as `CUPS  ALLOW IN  Anywhere`.
+            # Recorded as one, not stuffed into to_addr: a Rule with a profile
+            # name in an address field fails its own validate(), which made the
+            # privileged read of the rule list fail outright on any machine with
+            # one ("not an address or subnet: 'CUPS'") and, once past that,
+            # raised out of the middle of an apply with the files already
+            # written and no rollback.
             to_addr = to_field
+            try:
+                _validate_address(to_field)
+            except UfwError:
+                to_addr, app = "any", to_field
 
         from_field = match.group("from").strip()
         from_addr = "any" if from_field.lower().startswith("anywhere") else from_field
@@ -308,6 +356,7 @@ def parse_status(output: str) -> list[Rule]:
                 to_addr=to_addr,
                 comment=(match.group("comment") or "").strip()[:64],
                 v6=v6,
+                app=app,
             )
         )
     return rules
@@ -349,11 +398,15 @@ def plan_commands(current: State, wanted: State) -> list[tuple[list[str], str]]:
         current_keys = {rule.key(): rule for rule in current.rules}
         wanted_keys = {rule.key(): rule for rule in wanted.rules}
 
+        # `not rule.managed` skips application-profile rules on both sides: they
+        # are shown for completeness but never built into a command, so a
+        # machine with `ufw allow CUPS` can still have its policy and other
+        # rules changed instead of the whole apply failing on that one row.
         for key, rule in current_keys.items():
-            if key not in wanted_keys and not rule.v6:
+            if key not in wanted_keys and not rule.v6 and rule.managed:
                 commands.append((rule.to_argv(delete=True), f"remove: {rule.summary}"))
         for key, rule in wanted_keys.items():
-            if key not in current_keys and not rule.v6:
+            if key not in current_keys and not rule.v6 and rule.managed:
                 commands.append((rule.to_argv(), f"add: {rule.summary}"))
 
     # Enabling last, so the policy and rules are already in place when it comes up.
@@ -386,6 +439,7 @@ def to_payload(state: State) -> dict:
                 "to_addr": r.to_addr,
                 "comment": r.comment,
                 "v6": r.v6,
+                "app": r.app,
             }
             for r in state.rules
         ],
@@ -416,6 +470,7 @@ def from_payload(data: dict) -> State:
             to_addr=str(raw.get("to_addr", "any")),
             comment=str(raw.get("comment", "")),
             v6=bool(raw.get("v6", False)),
+            app=str(raw.get("app", "")),
         )
         rule.validate()
         rules.append(rule)

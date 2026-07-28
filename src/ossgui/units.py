@@ -144,9 +144,15 @@ def validate(name: str, action: str) -> None:
         raise UnitError(f"unknown action {action!r}")
     if not _UNIT_NAME.match(name):
         raise UnitError(f"not a valid unit name: {name!r}")
-    if action == "mask" and name in NEVER_MASK:
+    # Both actions are refused for the NEVER_MASK set, not just mask: to_argv
+    # builds `disable --now`, which stops the running unit exactly as masking
+    # does. Guarding only the mask left the same machine-breaking outcome
+    # reachable through the other action — logind or dbus stopped underneath a
+    # live session, with the unit merely no longer masked afterwards.
+    if action in ("mask", "disable") and name in NEVER_MASK:
         raise UnitError(
-            f"{name} is required for the system to be usable and will not be masked"
+            f"{name} is required for the system to be usable and will not be "
+            f"{'masked' if action == 'mask' else 'stopped'}"
         )
 
 

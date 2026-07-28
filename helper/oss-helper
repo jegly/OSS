@@ -20,7 +20,19 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, "/usr/share/oss")
+# Which ossgui the helper runs is decided by *where this script itself lives*,
+# never by the environment or by anything the caller passes: this runs as root
+# under pkexec, and a caller-chosen import path would be a caller-chosen root
+# payload. An installed helper at /usr/libexec has no sibling src/, so it loads
+# the trusted installed copy. A helper still sitting in the source tree loads
+# that tree — without this, OSS_DEV_HELPER=1 ran the *installed* code, so a fix
+# under test appeared not to work at all (the same shadowing trap the `oss`
+# launcher documents).
+_DEV_SRC = Path(__file__).resolve().parent.parent / "src"
+if (_DEV_SRC / "ossgui" / "__init__.py").is_file():
+    sys.path.insert(0, str(_DEV_SRC))
+else:
+    sys.path.insert(0, "/usr/share/oss")
 
 from ossgui import catalogue as catalogue_module  # noqa: E402
 from ossgui.apply import Result, run_payload  # noqa: E402

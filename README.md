@@ -17,7 +17,7 @@
 ![GTK4](https://img.shields.io/badge/GTK-4.0-4A90D9?style=flat-square&logo=gtk&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Settings](https://img.shields.io/badge/settings-614-success?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-168%20passing-brightgreen?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-234%20passing-brightgreen?style=flat-square)
 ![Packages](https://img.shields.io/badge/packages-deb%20%7C%20rpm%20%7C%20pkgbuild-orange?style=flat-square)
 
 
@@ -231,7 +231,7 @@ The Arch and RPM wrappers build a source tarball from your working tree, includi
 
 ```bash
 PYTHONPATH=src python3 oss              # run from the tree
-python3 -m unittest discover -s tests   # 145 tests
+python3 -m unittest discover -s tests   # 234 tests
 python3 tools/audit-targets.py          # check every target against this system
 python3 tools/screenshot.py out.png --section ufw
 python3 tools/build_presets.py          # regenerate the derived presets

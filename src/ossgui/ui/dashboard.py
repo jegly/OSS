@@ -32,6 +32,14 @@ SEVERITY_ICON = {
     "info": "dialog-information-symbolic",
 }
 
+#: Which Overview filter answers "which ones?" for each state row.
+STATE_FILTER = {
+    State.APPLIED: "in effect",
+    State.PENDING_REBOOT: "needs reboot",
+    State.DIFFERS: "drift",
+    State.NOT_SET: "not applied",
+}
+
 
 class Dashboard(Gtk.Box):
     """The read-only status view."""
@@ -111,8 +119,47 @@ class Dashboard(Gtk.Box):
             dot = Gtk.Label(label=glyph)
             dot.add_css_class(css)
             row.add_prefix(dot)
+            filter_name = STATE_FILTER.get(state)
+            if filter_name:
+                row.set_subtitle("Click to see which")
+                row.set_activatable(True)
+                row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+                row.connect("activated", self._on_state_row, filter_name)
+            group.add(row)
+
+        # Settings that are on but came from the user's own files: the app can
+        # show them but not manage them until they are adopted. Capture is the
+        # feature for exactly that, and the preset menu alone hides it too well.
+        unmanaged = sum(
+            1
+            for flag_id, flag_state in self.window.states.items()
+            if flag_state.state in (State.APPLIED, State.PENDING_REBOOT)
+            and flag_id not in self.window.staging.baseline
+        )
+        if unmanaged:
+            row = Adw.ActionRow(
+                title=f"Let this app manage the {unmanaged} settings it did not write",
+                subtitle=(
+                    "They are in effect from this machine's own config files, so "
+                    "their switches are on but locked. Capture stages them as this "
+                    "app's own, reviewable before anything is written."
+                ),
+            )
+            row.set_subtitle_lines(4)
+            button = Gtk.Button(label="Capture…", valign=Gtk.Align.CENTER)
+            button.add_css_class("suggested-action")
+            button.connect("clicked", self._on_capture)
+            row.add_suffix(button)
             group.add(row)
         return group
+
+    def _on_capture(self, _button: Gtk.Button) -> None:
+        application = self.window.get_application()
+        if application is not None:
+            application.activate_action("capture", None)
+
+    def _on_state_row(self, _row: Adw.ActionRow, filter_name: str) -> None:
+        self.window.show_filtered(filter_name)
 
     # -- findings ------------------------------------------------------- #
 
@@ -262,7 +309,8 @@ class Dashboard(Gtk.Box):
     def _sections_group(self) -> Adw.PreferencesGroup:
         group = Adw.PreferencesGroup(
             title="By section",
-            description="Click a section in the sidebar to work through it.",
+            description="Click a section to open it. Each card's switch shows "
+            "whether the setting is on right now, however it got that way.",
         )
         for section in self.window.catalogue.sections:
             if not section.flags:
@@ -287,5 +335,11 @@ class Dashboard(Gtk.Box):
             badge = Gtk.Label(label=f"{applied}/{max(total, 0)}")
             badge.add_css_class("changed-counter")
             row.add_suffix(badge)
+            row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+            row.set_activatable(True)
+            row.connect("activated", self._on_section_row, section.id)
             group.add(row)
         return group
+
+    def _on_section_row(self, _row: Adw.ActionRow, section_id: str) -> None:
+        self.window.show_section(section_id)

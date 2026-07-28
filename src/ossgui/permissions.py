@@ -71,9 +71,10 @@ class Row:
         current = f"{self.current_mode:04o}" if self.current_mode is not None else "?"
         if self.compliant:
             return f"{current} {self.current_owner}:{self.current_group} — already correct"
+        ownership = f" {self.owner}:{self.group}" if self.owner or self.group else ""
         return (
             f"{current} {self.current_owner}:{self.current_group} → "
-            f"{self.target_mode:04o} {self.owner}:{self.group}"
+            f"{self.target_mode:04o}{ownership}"
         )
 
 
@@ -131,8 +132,27 @@ def user_rows(home: str | None = None) -> list[Row]:
 
 
 def inspect(rows: list[Row]) -> list[Row]:
-    """Fill in the current mode and owner for each row."""
+    """Fill in the current mode and owner for each row.
+
+    An owner or group this machine does not have is dropped from the row rather
+    than offered: the table is written in Debian terms, and ``syslog`` (rsyslog)
+    and ``shadow`` (Debian only — Fedora and Arch keep /etc/shadow root-owned)
+    simply do not exist everywhere. Left in, the row proposed a chown that could
+    not be performed, and the mode fix that was the point of the row went with it.
+    """
     for row in rows:
+        if row.owner and not known_owner(row.owner):
+            row.note = (
+                row.note or f"This system has no {row.owner!r} user, so only the "
+                f"mode is changed."
+            )
+            row.owner = ""
+        if row.group and not known_group(row.group):
+            row.note = (
+                row.note or f"This system has no {row.group!r} group, so only the "
+                f"mode is changed."
+            )
+            row.group = ""
         try:
             stat = Path(row.path).lstat()
         except OSError:
@@ -370,6 +390,53 @@ def validate_change(path: str, mode: int) -> None:
         raise PermissionError_(f"{path} is a system directory this app will not touch")
 
 
+def resolve_ownership(owner: str, group: str) -> tuple[int, int]:
+    """``(uid, gid)`` for a chown, or -1 for a name that was not given.
+
+    Raises rather than letting ``pwd``/``grp`` throw KeyError, because the
+    caller is the privileged helper mid-transaction: it needs a failure it can
+    roll back from and report, not an exception that escapes the transaction.
+
+    Which is not hypothetical. Half the recommended table names an owner or
+    group that only some distributions ship — ``syslog`` comes with rsyslog,
+    and a journald-only machine has no such account; neither Fedora nor Arch
+    has a ``shadow`` group at all.
+    """
+    uid = gid = -1
+    if owner:
+        try:
+            uid = pwd.getpwnam(owner).pw_uid
+        except KeyError as exc:
+            raise PermissionError_(
+                f"this system has no {owner!r} user, so the owner cannot be set"
+            ) from exc
+    if group:
+        try:
+            gid = grp.getgrnam(group).gr_gid
+        except KeyError as exc:
+            raise PermissionError_(
+                f"this system has no {group!r} group, so the group cannot be set"
+            ) from exc
+    return uid, gid
+
+
+def known_owner(name: str) -> bool:
+    """Whether this machine has such a user."""
+    try:
+        pwd.getpwnam(name)
+    except KeyError:
+        return False
+    return True
+
+
+def known_group(name: str) -> bool:
+    try:
+        grp.getgrnam(name)
+    except KeyError:
+        return False
+    return True
+
+
 def from_payload(data: dict) -> list[Change]:
     """Validate a permissions payload from the GUI."""
     if not isinstance(data, dict):
@@ -388,6 +455,10 @@ def from_payload(data: dict) -> list[Change]:
         for name in (owner, group):
             if name and not re.match(r"^[a-z_][a-z0-9_-]{0,31}$", name):
                 raise PermissionError_(f"not a usable user or group name: {name!r}")
+        # Checked here as well as at chown time so an account this machine does
+        # not have is refused before a single file has been written, instead of
+        # part-way through and needing a rollback to undo.
+        resolve_ownership(owner, group)
         out.append(Change(path=path, mode=mode, owner=owner, group=group))
     return out
 

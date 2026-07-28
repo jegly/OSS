@@ -146,6 +146,100 @@ class TestRollback(SandboxCase):
         self.assertIn("not allowed", result.error)
 
 
+#: What `sysctl --system` prints on a hand-hardened machine where a
+#: pre-existing file names an interface that is currently down. Exit code 1.
+FOREIGN_FAILURE = """\
+* Applying /usr/lib/sysctl.d/50-default.conf ...
+kernel.core_pattern = core
+* Applying /etc/sysctl.d/55-network-security.conf ...
+sysctl: cannot stat /proc/sys/net/ipv4/conf/wg-entry/rp_filter: No such file or directory
+sysctl: permission denied on key 'net.ipv4.conf.wg-exit.accept_ra_pinfo'
+* Applying /etc/sysctl.d/99-oss.conf ...
+net.ipv6.conf.all.disable_ipv6 = 1
+* Applying /etc/sysctl.conf ...
+"""
+
+
+class TestSysctlReloadTolerance(SandboxCase):
+    """`sysctl --system` re-applies files this app never wrote; a failure in
+    one of *those* must not fail the transaction (bug: one toggle on a
+    hand-hardened machine threw "Apply failed" over the machine's own config).
+    """
+
+    def plan(self, key: str = "kernel.kptr_restrict") -> render.Plan:
+        return render.Plan(
+            writes=[
+                render.FileWrite(
+                    path="/etc/sysctl.d/99-oss.conf",
+                    content=f"{key} = 2\n",
+                    section="sysctl",
+                )
+            ],
+            commands=[render.Command(("/usr/sbin/sysctl", "--system"))],
+        )
+
+    def test_error_lines_are_separated_from_the_applied_echo(self) -> None:
+        lines = apply._sysctl_error_lines(FOREIGN_FAILURE)
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(all(line.startswith("sysctl:") for line in lines))
+
+    def test_the_failing_key_is_read_from_either_error_shape(self) -> None:
+        self.assertEqual(
+            apply._sysctl_error_key(
+                "sysctl: cannot stat /proc/sys/net/ipv4/conf/wg-entry/rp_filter: No such file"
+            ),
+            "net.ipv4.conf.wg-entry.rp_filter",
+        )
+        self.assertEqual(
+            apply._sysctl_error_key(
+                "sysctl: permission denied on key 'net.ipv4.conf.wg-exit.accept_ra_pinfo'"
+            ),
+            "net.ipv4.conf.wg-exit.accept_ra_pinfo",
+        )
+        self.assertIsNone(apply._sysctl_error_key("simulated reload failure"))
+
+    def test_foreign_key_failures_do_not_fail_the_transaction(self) -> None:
+        ours, detail = apply._sysctl_reload_verdict(self.plan(), FOREIGN_FAILURE)
+        self.assertFalse(ours)
+        self.assertIn("did not write", detail)
+
+    def test_a_failure_naming_our_key_still_fails(self) -> None:
+        output = FOREIGN_FAILURE + "sysctl: permission denied on key 'kernel.kptr_restrict'\n"
+        ours, detail = apply._sysctl_reload_verdict(self.plan(), output)
+        self.assertTrue(ours)
+        # The detail is the error lines, not the hundreds of applied-key echoes.
+        self.assertNotIn("* Applying", detail)
+        self.assertIn("kernel.kptr_restrict", detail)
+
+    def test_an_unattributable_failure_still_fails(self) -> None:
+        ours, _detail = apply._sysctl_reload_verdict(self.plan(), "simulated reload failure")
+        self.assertTrue(ours)
+        ours, _detail = apply._sysctl_reload_verdict(self.plan(), "")
+        self.assertTrue(ours)
+
+    def test_the_transaction_survives_a_foreign_sysctl_failure(self) -> None:
+        target = self.sandboxed("/etc/sysctl.d/99-oss.conf")
+        target.parent.mkdir(parents=True, exist_ok=True)
+
+        real_run = apply.run
+
+        def fake_run(argv, stdin=None):
+            if "--system" in argv:
+                return 1, FOREIGN_FAILURE
+            return real_run(argv, stdin)
+
+        apply.run = fake_run
+        self.addCleanup(setattr, apply, "run", real_run)
+
+        result = apply.apply_plan(self.catalogue, self.plan(), {"kptr_restrict": "2"})
+        self.assertTrue(result.ok, result.error)
+        self.assertFalse(result.rolled_back)
+        self.assertEqual(target.read_text(), "kernel.kptr_restrict = 2\n")
+        # The tolerated failure is still on the record for the results screen.
+        command_steps = [s for s in result.steps if s.kind == "command"]
+        self.assertTrue(any("did not write" in s.output for s in command_steps))
+
+
 class TestRenderIdempotence(SandboxCase):
     def test_reapplying_an_unchanged_selection_is_a_no_op(self) -> None:
         selection = {"kptr_restrict": "2", "dmesg_restrict": "1"}

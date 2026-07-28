@@ -256,7 +256,20 @@ def validate(name: str) -> None:
 
 
 def to_argv(names: list[str], purge: bool = False) -> list[str]:
-    """The removal command. Non-interactive, and never with --force anything."""
+    """The removal command. Non-interactive, and never with --force anything.
+
+    Deliberately *without* ``--no-remove``. That flag reads like "do not let
+    this cascade", but what it actually means is "abort if anything at all
+    would be removed" — which is every removal, including the one being asked
+    for. With it present apt answered `E: Packages need to be removed but
+    remove is disabled.` for every selection, exit 100, so the section could
+    never remove a single package and took the whole transaction down with it.
+
+    The guard it was standing in for is in :func:`from_payload`, which re-runs
+    apt's resolution as root and refuses if the cascade has swept up anything
+    protected. Essential packages need ``--allow-remove-essential``, which is
+    never passed, so apt refuses those on its own.
+    """
     if not names:
         raise PackageError("nothing to remove")
     for name in names:
@@ -264,8 +277,6 @@ def to_argv(names: list[str], purge: bool = False) -> list[str]:
     return [
         APT_GET,
         "--yes",
-        # Refuse rather than proceed if apt considers the operation dangerous.
-        "--no-remove",
         "purge" if purge else "remove",
         *sorted(names),
     ]
