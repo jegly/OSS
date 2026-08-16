@@ -1,0 +1,14 @@
+#  TPM & measured boot
+#
+#  Read-only, and deliberately so. Sealing a disk key to the TPM is a one-way
+#  operation whose failure mode is being locked out of your own disk, and it
+#  belongs to systemd-cryptenroll rather than to a checkbox in a GUI. This
+#  section reports where the machine stands and prints the exact command.
+
+[section]
+id       = "tpm"
+title    = "tpm"
+nav      = "System"
+order    = 95
+syntax   = "special"
+desc     = "Whether this machine has a TPM, what the firmware measured into it, and whether the disk key is actually sealed to it. A TPM with nothing bound to it protects nothing, and one that unseals without a PIN means powering the machine on is enough to decrypt it."

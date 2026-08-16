@@ -129,3 +129,196 @@ desc    = "Cannot add or configure printers"
 why     = "Printer setup reaches the network and installs drivers"
 risk    = "safe"
 breaks  = "Adding a printer from the desktop"
+
+# --------------------------------------------------------------------------- #
+#  removable media
+#
+#  The desktop's answer to plugging something in. autorun-never is already the
+#  Ubuntu default; the two automount keys are not, and between them they mean an
+#  inserted disk is mounted and opened before you have decided you trust it.
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "media_automount"
+group   = "desktop / removable media"
+key     = "org.gnome.desktop.media-handling automount"
+value   = "false"
+default = "true"
+title   = "Don't auto-mount media"
+desc    = "Inserted disks wait to be opened"
+why     = "Mounting runs filesystem driver code on data you have not looked at — the parsing surface behind a USB stick is the whole filesystem implementation"
+risk    = "caution"
+breaks  = "USB sticks and SD cards need mounting by hand from Files"
+
+[[flag]]
+id      = "media_automount_open"
+group   = "desktop / removable media"
+key     = "org.gnome.desktop.media-handling automount-open"
+value   = "false"
+default = "true"
+title   = "Don't auto-open media"
+desc    = "No file manager window on insert"
+why     = "Opening a window builds thumbnails, which hands every image and video parser on the system a file chosen by whoever left the stick there"
+risk    = "safe"
+
+[[flag]]
+id      = "media_autorun_never"
+group   = "desktop / removable media"
+key     = "org.gnome.desktop.media-handling autorun-never"
+value   = "true"
+default = "true"
+title   = "Never autorun software"
+desc    = "Ignores autorun instructions on media"
+why     = "The classic removable-media attack, and the one that needs no exploit at all"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  privacy
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "privacy_recent_files"
+group   = "desktop / privacy"
+key     = "org.gnome.desktop.privacy remember-recent-files"
+value   = "false"
+default = "true"
+title   = "No recent-files history"
+desc    = "Stops recording what you opened"
+why     = "recently-used.xbel is a plain-text list of every document path you have touched, readable by anything running as you"
+risk    = "safe"
+breaks  = "The Recent list in Files and in application open dialogs"
+
+[[flag]]
+id      = "privacy_old_trash"
+group   = "desktop / privacy"
+key     = "org.gnome.desktop.privacy remove-old-trash-files"
+value   = "true"
+default = "false"
+title   = "Empty old trash"
+desc    = "Purges trash automatically"
+why     = "Deleted-but-not-really files sit in the trash indefinitely, so a compromise still reaches things you thought were gone"
+risk    = "caution"
+breaks  = "Recovering something you deleted more than 30 days ago"
+
+[[flag]]
+id      = "privacy_old_temp"
+group   = "desktop / privacy"
+key     = "org.gnome.desktop.privacy remove-old-temp-files"
+value   = "true"
+default = "false"
+title   = "Purge old temp files"
+desc    = "Clears stale files from /tmp"
+why     = "Temporary files routinely hold decrypted copies of things that are encrypted everywhere else"
+risk    = "safe"
+
+[[flag]]
+id      = "privacy_old_files_age"
+group   = "desktop / privacy"
+key     = "org.gnome.desktop.privacy old-files-age"
+value   = "7"
+default = "30"
+title   = "Purge after a week"
+desc    = "How old counts as old"
+why     = "Only meaningful with the two purge settings on; 30 days is a long time for a decrypted temp file to sit around"
+risk    = "safe"
+
+[[flag]]
+id      = "privacy_technical_reports"
+group   = "desktop / privacy"
+key     = "org.gnome.desktop.privacy report-technical-problems"
+value   = "false"
+default = "true"
+title   = "No automatic crash reports"
+desc    = "Stops sending problem reports"
+why     = "A crash report carries a process memory dump, which is where passwords and keys live at the moment of the crash"
+risk    = "safe"
+
+[[flag]]
+id      = "privacy_usage_stats"
+group   = "desktop / privacy"
+key     = "org.gnome.desktop.privacy send-software-usage-stats"
+value   = "false"
+default = "true"
+title   = "No usage statistics"
+desc    = "Stops reporting which apps you run"
+why     = "The list of software you use is a profile of what to attack"
+risk    = "safe"
+
+[[flag]]
+id      = "privacy_hide_identity"
+group   = "desktop / privacy"
+key     = "org.gnome.desktop.privacy hide-identity"
+value   = "true"
+default = "false"
+title   = "Hide your identity"
+desc    = "Keeps your name out of app-visible fields"
+why     = "Applications otherwise read your full name and username straight from the session"
+risk    = "safe"
+
+[[flag]]
+id      = "location_disabled"
+group   = "desktop / privacy"
+key     = "org.gnome.system.location enabled"
+value   = "false"
+default = "false"
+title   = "No location services"
+desc    = "Geolocation off for the desktop"
+why     = "Wi-Fi-based geolocation gives your physical position to anything that asks the portal"
+risk    = "safe"
+breaks  = "Automatic timezone, weather and maps"
+
+[[flag]]
+id      = "search_providers_external"
+group   = "desktop / privacy"
+key     = "org.gnome.desktop.search-providers disable-external"
+value   = "true"
+default = "false"
+title   = "No external search providers"
+desc    = "Overview search stays local"
+why     = "Typing in the Activities overview otherwise sends the string to whatever providers are registered, including online ones"
+risk    = "safe"
+breaks  = "Online results in the overview search"
+
+[[flag]]
+id      = "shell_remember_mount_password"
+group   = "desktop / privacy"
+key     = "org.gnome.shell remember-mount-password"
+value   = "false"
+default = "false"
+title   = "Don't remember mount passwords"
+desc    = "No saved passphrases for encrypted volumes"
+why     = "A remembered LUKS or network-share passphrase lands in the keyring, where anything running as you can ask for it"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  session lockdown
+# --------------------------------------------------------------------------- #
+
+#  org.gnome.desktop.lockdown disable-save-to-disk is deliberately not offered.
+#  It is a kiosk setting: turning it on stops every application saving anything
+#  anywhere, and the only value this catalogue could ship for it is the default
+#  it already has — a flag that stages a no-op and always reads as "applied".
+
+[[flag]]
+id      = "lockdown_application_handlers"
+group   = "desktop / lockdown"
+key     = "org.gnome.desktop.lockdown disable-application-handlers"
+value   = "true"
+default = "false"
+title   = "No URL handler dispatch"
+desc    = "Links do not launch registered applications"
+why     = "A URL scheme handler turns a link in a document into an application launch with attacker-chosen arguments"
+risk    = "breaking"
+breaks  = "Clicking any link or attachment to open it in its application"
+
+[[flag]]
+id      = "notifications_show_banners"
+group   = "desktop / lockdown"
+key     = "org.gnome.desktop.notifications show-banners"
+value   = "false"
+default = "true"
+title   = "No notification banners"
+desc    = "Nothing pops up over the screen"
+why     = "Banners show message content over whatever is on screen, including while screen sharing or presenting"
+risk    = "caution"
+breaks  = "You stop seeing notifications as they arrive"

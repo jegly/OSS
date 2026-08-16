@@ -1,19 +1,27 @@
 #  GRUB / kernel command line — BUILD_PLAN §4.4, plus the boot-menu settings
-#  from §4.23. Written as a drop-in so /etc/default/grub itself stays untouched.
+#  from §4.23. Merged into /etc/default/grub, which is the file people actually
+#  read and hand-edit to check what their kernel command line is.
+#
+#  This used to write /etc/default/grub.d/99-oss.cfg instead. That drop-in works
+#  on Debian, but it splits the truth across two files: the line you read in
+#  /etc/default/grub is not the line that boots, and anything you set by hand
+#  there is silently overridden by the drop-in sourced after it.
 
 [section]
-id      = "grub"
-title   = "grub"
-nav     = "System"
-order   = 20
-syntax  = "grub"
-target  = "/etc/default/grub.d/99-oss.cfg"
-reload  = [["/usr/sbin/update-grub"]]
-desc    = "Kernel command-line hardening. Every flag here needs a reboot."
-#  /etc/default/grub.d/ is a Debian mechanism: grub-mkconfig sources it only
-#  because Debian patches it to. Fedora and Arch read /etc/default/grub and
-#  nothing else, so a drop-in here would be written and then ignored.
-families = ["debian"]
+id       = "grub"
+title    = "grub"
+nav      = "System"
+order    = 20
+syntax   = "grub"
+target   = "/etc/default/grub"
+in_place = true
+reload   = [["/usr/sbin/update-grub"]]
+desc     = "Kernel command-line hardening, merged into /etc/default/grub. Every flag here needs a reboot."
+#  No families gate. /etc/default/grub is read by Debian, Fedora, Arch and SUSE
+#  alike — it was the old grub.d drop-in that was Debian-only, and that is gone.
+#  The reload differs per family and is already resolved in ossgui.distro:
+#  update-grub on Debian, grub-mkconfig / grub2-mkconfig with the right -o path
+#  everywhere else.
 
 # --------------------------------------------------------------------------- #
 #  memory
@@ -207,6 +215,7 @@ labels  = ["auto", "auto + no hyperthreading"]
 title   = "Speculation mitigations"
 desc    = "Master switch for CPU bug fixes"
 why     = "Meltdown/Spectre-class bugs leak memory across security boundaries"
+affects = "All of them: this is the master switch for every CPU-bug mitigation the kernel has."
 help    = "nosmt disables hyperthreading, which is what actually closes the cross-thread leaks — at the cost of roughly half your logical cores."
 risk    = "caution"
 reboot  = true
@@ -221,6 +230,7 @@ default = ""
 title   = "Force SMT off"
 desc    = "Hyperthreading off, unconditionally"
 why     = "Sibling threads share caches and buffers — that's the leak"
+affects = "Any CPU with SMT/hyperthreading. Closes the cross-thread leaks in MDS, L1TF and TAA."
 risk    = "breaking"
 reboot  = true
 breaks  = "Halves logical CPU count; can't be re-enabled without reboot"
@@ -234,6 +244,7 @@ default = "auto"
 title   = "Page-table isolation"
 desc    = "Separates kernel and user page tables"
 why     = "The Meltdown fix — unmaps kernel memory from user page tables"
+affects = "Intel x86 only — Core 2 through Coffee Lake (up to 2019). AMD and Arm are not affected."
 risk    = "safe"
 reboot  = true
 breaks  = "Syscall-heavy workload slowdown"
@@ -247,6 +258,7 @@ default = "auto"
 title   = "Spectre v2 mitigation"
 desc    = "Branch-target injection defence"
 why     = "Lets an attacker steer your kernel's speculative execution"
+affects = "Nearly every out-of-order CPU: Intel, AMD and Arm alike."
 risk    = "safe"
 reboot  = true
 
@@ -259,6 +271,7 @@ default = "auto"
 title   = "Spectre v2 (user-to-user)"
 desc    = "Isolates processes from each other"
 why     = "Without it one process can steer another's branch prediction"
+affects = "Same hardware as spectre_v2 — Intel, AMD and Arm."
 risk    = "caution"
 reboot  = true
 breaks  = "Context-switch cost"
@@ -272,6 +285,7 @@ default = "auto"
 title   = "Speculative store bypass"
 desc    = "Spectre v4 defence"
 why     = "Speculative stores expose stale values across boundaries"
+affects = "Intel Sandy Bridge (2011) onward, AMD Family 15h onward, and many Arm cores."
 risk    = "safe"
 reboot  = true
 
@@ -281,9 +295,16 @@ group   = "grub / cpu mitigations"
 key     = "ssbd"
 value   = "force-on"
 default = "auto"
-title   = "Force SSBD everywhere"
+title   = "Force SSBD everywhere (arm64)"
 desc    = "Applies SSB defence to all tasks"
 why     = "Removes the per-process opt-in"
+affects = "arm64 only. On x86 this parameter does not exist — spec_store_bypass_disable=on is the equivalent, and it is the flag above."
+#  `ssbd=` is an arm64 parameter. x86 does not implement it, and an unknown
+#  parameter is not rejected: the kernel logs "Unknown kernel command line
+#  parameters" and passes it to userspace. So on x86 this sat in the command
+#  line looking applied and did nothing — verified against a running kernel,
+#  which listed `ssbd=force-on` among the parameters it did not recognise.
+needs   = ["arch:aarch64"]
 risk    = "caution"
 reboot  = true
 breaks  = "Broad performance cost"
@@ -297,6 +318,7 @@ default = "flush"
 title   = "L1TF (Foreshadow)"
 desc    = "Full L1 terminal-fault defence"
 why     = "Reads L1 cache across VM and process boundaries"
+affects = "Intel only — Nehalem (2008) through Coffee Lake. AMD is not affected."
 risk    = "caution"
 reboot  = true
 breaks  = "Disables SMT; heavy cost for VM hosts"
@@ -310,6 +332,7 @@ default = "full"
 title   = "MDS (Zombieload)"
 desc    = "Microarchitectural data sampling"
 why     = "Leaks data from internal CPU buffers to any sibling thread"
+affects = "Intel only — Nehalem through Coffee Lake. Fixed in silicon from Whiskey Lake and Cascade Lake onward."
 risk    = "caution"
 reboot  = true
 breaks  = "Disables SMT"
@@ -323,6 +346,7 @@ default = "off"
 title   = "Disable TSX"
 desc    = "Turns off hardware transactions"
 why     = "TSX enables TAA and several side channels, and almost nothing uses it"
+affects = "Intel CPUs with TSX — Haswell (2013) onward. Earlier cores have no TSX to disable."
 risk    = "safe"
 reboot  = true
 
@@ -335,6 +359,7 @@ default = "full"
 title   = "TAA mitigation"
 desc    = "TSX asynchronous abort defence"
 why     = "The TSX sibling of MDS"
+affects = "Intel with TSX — Haswell through Cascade Lake."
 risk    = "caution"
 reboot  = true
 breaks  = "Disables SMT"
@@ -348,6 +373,7 @@ default = "full"
 title   = "MMIO stale data"
 desc    = "Clears buffers around MMIO"
 why     = "Device MMIO reads can return other contexts' data"
+affects = "Intel Skylake through Ice Lake and Tiger Lake."
 risk    = "caution"
 reboot  = true
 breaks  = "Disables SMT"
@@ -361,6 +387,7 @@ default = "auto"
 title   = "Retbleed"
 desc    = "Return-instruction speculation"
 why     = "Return addresses are speculated from an attacker-poisoned buffer"
+affects = "Intel 6th–8th gen (Skylake–Coffee Lake) and AMD Zen 1–Zen 2."
 risk    = "caution"
 reboot  = true
 breaks  = "Disables SMT; notable AMD Zen 1/2 cost"
@@ -374,6 +401,7 @@ default = "auto"
 title   = "GDS (Downfall)"
 desc    = "AVX gather data sampling"
 why     = "AVX gather instructions leak register contents across boundaries"
+affects = "Intel 6th–11th gen (Skylake–Tiger Lake / Rocket Lake) with AVX2 or AVX-512 gather."
 risk    = "caution"
 reboot  = true
 breaks  = "AVX gather throughput"
@@ -387,6 +415,7 @@ default = "auto"
 title   = "RFDS"
 desc    = "Register-file data sampling"
 why     = "Atom-core register leak (2024 class)"
+affects = "Intel Atom E-cores — Alder Lake-N and the E-cores of 12th–13th gen."
 risk    = "safe"
 reboot  = true
 
@@ -399,6 +428,7 @@ default = "auto"
 title   = "Inception / SRSO"
 desc    = "AMD return-stack overflow"
 why     = "Lets an attacker inject a speculative return target on Zen"
+affects = "AMD only — Zen 1 through Zen 4."
 risk    = "safe"
 reboot  = true
 
@@ -411,6 +441,7 @@ default = "auto"
 title   = "SRBDS"
 desc    = "Special-register buffer sampling"
 why     = "Leaks RDRAND/RDSEED output — your randomness"
+affects = "Intel with RDRAND/RDSEED — Ivy Bridge through Coffee Lake. Some parts never got microcode."
 risk    = "safe"
 reboot  = true
 
@@ -423,6 +454,7 @@ default = "auto"
 title   = "iTLB multihit (KVM)"
 desc    = "Splits huge pages in guests"
 why     = "A guest can hang the host CPU via iTLB multihit"
+affects = "Intel cores before ~2020, and only when this machine is a KVM host."
 risk    = "caution"
 reboot  = true
 breaks  = "VM memory performance"
@@ -717,6 +749,7 @@ default = "auto"
 title   = "Branch History Injection"
 desc    = "The 2024 Spectre-v2 variant"
 why     = "BHI works around the existing Spectre-v2 defences by poisoning branch history instead"
+affects = "Intel from Haswell onward, most notably 6th–11th gen."
 risk    = "safe"
 reboot  = true
 
@@ -732,3 +765,110 @@ why     = "Keeps devices out of the low memory that legacy attacks target"
 risk    = "caution"
 reboot  = true
 breaks  = "Old devices that can only address 32 bits"
+
+# --------------------------------------------------------------------------- #
+#  newer CPU mitigations
+#
+#  These three bugs post-date the original catalogue. Each has its own sysfs
+#  entry under /sys/devices/system/cpu/vulnerabilities, so the "Not affected"
+#  greying works for them once they are mapped in probe.unaffected_mitigations.
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "indirect_target_selection"
+group   = "grub / cpu mitigations"
+key     = "indirect_target_selection"
+value   = "on"
+default = "auto"
+title   = "Mitigate ITS"
+desc    = "Indirect Target Selection"
+why     = "Intel branch predictors can be steered to a chosen indirect target across privilege boundaries"
+affects = "Intel 9th–11th gen Core and contemporary Xeon (Cascade Lake–Rocket Lake). Older cores are not affected."
+risk    = "caution"
+reboot  = true
+breaks  = "Indirect-branch-heavy workloads lose some throughput"
+
+[[flag]]
+id      = "tsa_mitigation"
+group   = "grub / cpu mitigations"
+key     = "tsa"
+value   = "on"
+default = "auto"
+title   = "Mitigate TSA"
+desc    = "AMD Transient Scheduler Attacks"
+why     = "Scheduler timing on affected AMD parts leaks data from loads that were never architecturally executed"
+affects = "AMD only — Zen 3, Zen 4 and Zen 5. Intel is not affected."
+risk    = "caution"
+reboot  = true
+breaks  = "Small scheduling cost on affected AMD CPUs"
+
+[[flag]]
+id      = "vmscape_mitigation"
+group   = "grub / cpu mitigations"
+key     = "vmscape"
+value   = "on"
+default = "auto"
+title   = "Mitigate VMSCAPE"
+desc    = "Guest-to-host branch leak"
+why     = "A guest can leave branch predictor state that the host userspace process running the VM then leaks through"
+affects = "AMD Zen and recent Intel, and only when this machine runs virtual machines."
+risk    = "caution"
+reboot  = true
+breaks  = "IBPB on VM exit costs measurably on virtualisation hosts"
+
+[[flag]]
+id      = "l1d_flush_on"
+group   = "grub / cpu mitigations"
+key     = "l1d_flush"
+value   = "on"
+default = "off"
+title   = "Flush L1D on switch"
+desc    = "Opt-in L1 data cache flush"
+why     = "Clears the L1 data cache when switching away from a task that asked for it, closing the sibling-thread read that L1TF exploits"
+affects = "Intel cores affected by L1TF — Nehalem through Coffee Lake."
+risk    = "caution"
+reboot  = true
+breaks  = "Context-switch cost; only tasks that opt in via prctl are affected"
+
+# --------------------------------------------------------------------------- #
+#  newer memory & device hardening
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "init_mlocked_on_free"
+group   = "grub / memory"
+key     = "init_mlocked_on_free"
+value   = "1"
+default = "0"
+title   = "Zero mlocked memory on free"
+desc    = "Wipes locked pages when released"
+why     = "mlock is what a process uses to keep a key or passphrase out of swap; without this the page is still handed on unzeroed when it is freed"
+risk    = "safe"
+reboot  = true
+breaks  = "Small cost when freeing locked memory"
+
+[[flag]]
+id      = "bdev_allow_write_mounted"
+group   = "grub / misc"
+key     = "bdev_allow_write_mounted"
+value   = "0"
+default = "1"
+title   = "No raw writes to mounted disks"
+desc    = "Blocks writing /dev/sda under a live filesystem"
+why     = "Writing a block device behind its mounted filesystem corrupts it and is a standard way to plant content the filesystem layer would have refused"
+risk    = "caution"
+reboot  = true
+breaks  = "Disk tools that write to a mounted device on purpose — some backup and imaging software"
+
+[[flag]]
+id      = "usb_authorized_default"
+group   = "grub / misc"
+key     = "usbcore.authorized_default"
+value   = "0"
+default = "1"
+title   = "New USB devices unauthorised"
+desc    = "Nothing plugged in works until allowed"
+why     = "Closes BadUSB and malicious-HID attacks at the door: a device that is not authorised never gets its driver bound"
+risk    = "breaking"
+reboot  = true
+breaks  = "Every USB device is dead on arrival, including the keyboard you would use to authorise it. Only sensible alongside USBGuard, which is what the usb section configures."

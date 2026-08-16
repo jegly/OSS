@@ -60,6 +60,7 @@ class FlagCard(Gtk.Box):
         staging: Staging,
         state: FlagState | None = None,
         unavailable_reason: str = "",
+        advisory: str = "",
     ) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         self.flag = flag
@@ -82,10 +83,23 @@ class FlagCard(Gtk.Box):
 
         if unavailable_reason:
             self.add_css_class("unavailable")
+            # The reason goes in the card, not only on it. GTK does not deliver
+            # motion events to an insensitive widget, so a tooltip set here can
+            # never be shown — which left a greyed-out card with no explanation
+            # anywhere on screen, and a whole section of them looking broken.
+            self._append_reason(unavailable_reason)
             self.set_sensitive(False)
             self.set_tooltip_text(unavailable_reason)
         else:
-            self.set_tooltip_text(self._tooltip())
+            # An advisory is not a block. The card stays live and selectable;
+            # the note just says what the app knows. "Your CPU is not affected
+            # by this bug" used to disable the flag, which took the decision
+            # away from the user over a verdict that a microcode update can
+            # change and that does not travel with a preset.
+            if advisory:
+                self.add_css_class("advisory")
+                self._append_reason(advisory)
+            self.set_tooltip_text(advisory or self._tooltip())
 
         self.refresh()
 
@@ -150,6 +164,16 @@ class FlagCard(Gtk.Box):
             desc.set_max_width_chars(26)
             self.append(desc)
 
+        # On the card, not in the tooltip: the point of this line is to be read
+        # before applying a preset on a different machine, and a tooltip you
+        # have to hover for is not read at that moment.
+        if self.flag.affects:
+            affects = Gtk.Label(label=f"Affects: {self.flag.affects}", xalign=0)
+            affects.add_css_class("flag-affects")
+            affects.set_wrap(True)
+            affects.set_max_width_chars(26)
+            self.append(affects)
+
         if self.flag.is_choice:
             self.dropdown = Gtk.DropDown.new_from_strings(
                 [self.flag.label_for(v) for v in self.flag.values]
@@ -176,6 +200,21 @@ class FlagCard(Gtk.Box):
             key.set_selectable(True)
             key.set_tooltip_text(key_line)
             self.append(key)
+
+    def _append_reason(self, reason: str) -> None:
+        """Why this card is greyed out, rendered inside it.
+
+        Kept short: the card is 220px wide and the full sentence lives in the
+        tooltip of the section notice, which is on a sensitive widget and does
+        show. The first sentence is the part that identifies the cause.
+        """
+        first = reason.split(".")[0].strip()
+        label = Gtk.Label(label=first or reason, xalign=0)
+        label.add_css_class("flag-desc")
+        label.add_css_class("dim-label")
+        label.set_wrap(True)
+        label.set_max_width_chars(26)
+        self.append(label)
 
     def _key_line(self) -> str:
         syntax = self.section.syntax_for(self.flag)

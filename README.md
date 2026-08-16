@@ -20,8 +20,8 @@
 ![Platform](https://img.shields.io/badge/platform-Linux-333?style=flat-square&logo=linux&logoColor=white)
 ![GTK4](https://img.shields.io/badge/GTK-4.0-4A90D9?style=flat-square&logo=gtk&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
-![Settings](https://img.shields.io/badge/settings-614-success?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-234%20passing-brightgreen?style=flat-square)
+![Settings](https://img.shields.io/badge/settings-689-success?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-285%20passing-brightgreen?style=flat-square)
 ![Packages](https://img.shields.io/badge/packages-deb%20%7C%20rpm%20%7C%20pkgbuild-orange?style=flat-square)
 
 </div>
@@ -34,10 +34,10 @@ Grab the package for your distribution from [Releases](https://github.com/jegly/
 
 | Distribution | Command |
 |---|---|
-| **Debian · Ubuntu · Mint · Pop!\_OS · elementary · Zorin** | `sudo apt install ./oss_0.1.1_all.deb` |
-| **Arch · Manjaro · EndeavourOS · CachyOS** | `sudo pacman -U oss-0.1.1-1-any.pkg.tar.*` |
-| **Fedora · Nobara · RHEL · Rocky · Alma** | `sudo dnf install oss-0.1.1-1.noarch.rpm oss-fonts-0.1.1-1.noarch.rpm` |
-| **openSUSE Tumbleweed · Leap** | `sudo zypper install oss-0.1.1-1.noarch.rpm oss-fonts-0.1.1-1.noarch.rpm` |
+| **Debian · Ubuntu · Mint · Pop!\_OS · elementary · Zorin** | `sudo apt install ./oss_1.0.0_all.deb` |
+| **Arch · Manjaro · EndeavourOS · CachyOS** | `sudo pacman -U oss-1.0.0-1-any.pkg.tar.*` |
+| **Fedora · Nobara · RHEL · Rocky · Alma** | `sudo dnf install oss-1.0.0-1.noarch.rpm oss-fonts-1.0.0-1.noarch.rpm` |
+| **openSUSE Tumbleweed · Leap** | `sudo zypper install oss-1.0.0-1.noarch.rpm oss-fonts-1.0.0-1.noarch.rpm` |
 
 The RPM ships the typefaces separately, so install both or the interface falls back to system fonts.
 
@@ -50,7 +50,7 @@ Or let it work out which one your system wants, build it, and install it:
 It reads `/etc/os-release` the same way the app does, prints the exact command before running it, and takes `--dry-run` if you want to see that first. It downloads nothing.
 
 > [!IMPORTANT]
-> Read [Distro support](#distro-support) before installing on Arch or Fedora. The packaging is finished; the catalogue underneath it is not.
+> Read [Distro support](#distro-support) before installing on Arch or Fedora. 672 of the 689 settings apply everywhere, but a handful of sections are still Debian-shaped and are skipped rather than applied there.
 
 ### Requirements
 
@@ -110,7 +110,7 @@ What's missing was never the mechanism. It's that almost nobody turns them on, b
 
 | | Preview | Undo | Verifies it took | Scope |
 |---|---|---|---|---|
-| **OSS** | Full file diff | Transaction rollback | Reads back live state | 614 settings, 25 areas |
+| **OSS** | Full file diff | Transaction rollback | Reads back live state | 689 settings, 27 areas |
 | Lynis and other auditors | — | — | — | Reports only, you fix it |
 | SCAP / OpenSCAP | Profile-level | — | Scan re-run | Compliance reporting |
 | Hardening scripts | — | — | — | Applies blind |
@@ -122,7 +122,7 @@ What's missing was never the mechanism. It's that almost nobody turns them on, b
 | | |
 |:---:|:---:|
 | ![Dashboard](docs/shots/dashboard.png) | ![sysctl](docs/shots/sysctl.png) |
-| **Dashboard** — what the machine is actually doing, and what's quietly wrong with it | **sysctl.d** — 144 kernel, memory and network settings |
+| **Dashboard** — what the machine is actually doing, and what's quietly wrong with it | **sysctl.d** — 169 kernel, memory and network settings |
 | ![GRUB](docs/shots/grub.png) | ![Review](docs/shots/review-summary.png) |
 | **GRUB** — kernel command line, every flag risk-rated | **Review** — every file and command, before anything is written |
 | ![Packages](docs/shots/packages.png) | ![Accounts](docs/shots/accounts.png) |
@@ -142,11 +142,11 @@ What's missing was never the mechanism. It's that almost nobody turns them on, b
 
 ## What's in it
 
-**25 sections, 614 settings.** All of it lives in TOML data files under `data/catalogue/`, so adding a setting means editing data, not code.
+**27 sections, 689 settings.** All of it lives in TOML data files under `data/catalogue/`, so adding a setting means editing data, not code.
 
 | Group | Sections |
 |---|---|
-| **System** | sysctl (kernel, memory, network), GRUB command line, module blacklists, installed packages, bootloader password |
+| **System** | sysctl (kernel, memory, network), GRUB command line, module blacklists, kernel debloat, installed packages, TPM and measured boot, bootloader password |
 | **Network** | ufw policies and rules, SSH, DNS over TLS, NetworkManager MAC privacy |
 | **Access** | PAM and passwords, users and groups, sudo, mount options, file permissions, USB device policy, snap permissions |
 | **Monitoring** | systemd sandboxing, services, auditd, AppArmor, journald, file integrity |
@@ -155,6 +155,12 @@ What's missing was never the mechanism. It's that almost nobody turns them on, b
 ### Worth calling out
 
 **Dashboard** — reports how the machine is configured right now, regardless of whether this app had anything to do with it. On the machine I built this on, it turned up five sysctl keys set to conflicting values in different files, 20 settings sitting in `/usr/lib/sysctl.d` where a package upgrade would overwrite them, a `crashkernel=` reservation that `kexec_load_disabled=1` had quietly made useless, and a default-deny outbound firewall with no rule for NTP, which explained why the clock kept drifting.
+
+**Kernel debloat** — a stock Ubuntu kernel ships around 6,900 loadable modules and boots using about 130. Every one of the rest is code the kernel will autoload on demand: a device appearing, an image being mounted, a packet arriving for a protocol nobody uses. This browses all of them, classified against what the running system actually depends on — loaded modules and mounted filesystems are refused outright, storage, input, HID and graphics are flagged risky because "not loaded now" doesn't mean "not needed at next boot", and the remainder are candidates. On the machine I built this on that's 126 refused, 1,258 risky, 5,517 candidates. Blacklisting only: deleting the `.ko` files buys nothing that `install <mod> /bin/false` doesn't, and costs you dpkg integrity, every kernel update putting them back, and any way to undo it without rescue media. The section says so rather than hiding it.
+
+**CPU vulnerabilities** — the dashboard reads `/sys/devices/system/cpu/vulnerabilities` and reports what's mitigated, what this CPU isn't affected by, and what's still vulnerable. This is the one part of the app the catalogue can't change: the kernel decides what it can mitigate, and some bugs have no fix available at all. It's worth showing precisely because a machine can be fully hardened by this app and still be vulnerable here.
+
+**TPM** — whether there's a TPM, what the firmware measured into it, and whether the disk key is actually sealed to it. A TPM with nothing bound to it protects nothing, and one that unseals with no PIN means powering the machine on is enough to decrypt it. Read-only by design: sealing a disk key wrong locks you out of your own disk, so the page prints the exact `systemd-cryptenroll` command instead of offering a checkbox.
 
 **Packages** — lists everything installed with the package manager's own description, defaulting to packages you asked for rather than ones that arrived as dependencies. Removals go through a simulated run first, so ticking `ubuntu-wallpapers` reports that it would also take `gdm3` and `gnome-shell`, and `libgtk-3-0t64` comes to 64 packages and 670 MB. There's no install path, deliberately.
 
@@ -174,13 +180,14 @@ Both directions are per-category, because a configuration isn't always portable 
 
 | Mechanism | How it works |
 |---|---|
-| **Undo is deleting a file** | Each section writes a single drop-in. Remove it, re-run the reload, that section is back to stock. |
-| **In-place edits are backed up** | `login.defs`, `faillock.conf`, `fstab` and file permissions have no drop-in mechanism, so they get a `.bak` and only their managed keys are touched. |
+| **Undo is deleting a file** | Most sections write a single drop-in. Remove it, re-run the reload, that section is back to stock. |
+| **In-place edits are backed up** | `/etc/default/grub`, `login.defs`, `faillock.conf`, `fstab` and file permissions have no drop-in mechanism, so they get a `.bak`, keep their existing mode, and only their managed keys are touched. Comments, ordering and anything you set by hand survive. |
 | **The helper doesn't trust the GUI** | `/usr/libexec/oss-helper` takes one JSON file and re-renders every target from the shipped catalogue itself. It accepts only flag ids and values, each checked against the catalogue's own allowlist. |
 | **Nothing reaches a shell** | Every command is on a fixed list. Free-form input is pattern-checked at both ends — ports, unit names, snap plugs, package names, account names. |
 | **Validators run first** | `sshd -t`, `visudo -c`, `auditctl -R` against the candidate file. For `fstab`, a live `mount -o remount`, so an option the kernel won't accept fails while the filesystem is still mounted rather than at boot. |
 | **One transaction** | Any failure restores every file and inverts the unit changes. |
 | **Read-back after apply** | Every value is re-read off the live system and reported as in effect, waiting for a reboot, or didn't take. |
+| **A parameter being set is not proof it worked** | For CPU mitigations the kernel has the last word and publishes it in sysfs, so that is what gets believed — not the presence of the token on the command line. `spec_store_bypass_disable=on` alongside `nospec_store_bypass_disable` reads as drift, naming the parameter that overrode it, rather than as applied. |
 | **A way out that isn't this app** | Back up every configuration location to a plain `.tar.gz` before you change anything. Restoring goes through the same transaction, per category, and the archive stays readable with `tar` if you'd rather not. |
 | **Irreversible things are gated** | `kexec_load_disabled`, `modules_disabled`, `lockdown=confidentiality` and audit `-e 2` appear in no preset except `paranoid`, and Apply stays disabled until you've scrolled to the end of the risk summary. |
 | **The platform is checked, not assumed** | Ubuntu 26.04 ships `sudo-rs`, which rejects four sudoers directives GNU sudo has. Those are greyed out with the reason rather than failing the transaction at validation time. |
@@ -193,7 +200,7 @@ The packaging is portable. The catalogue is not yet.
 
 The app works its family out from `/etc/os-release` at startup — not per-distro forks, and not a picker, because the machine already knows the answer and a wrong answer would write config to paths that silently do nothing. Set `OSS_DISTRO_FAMILY` to override.
 
-About **370 of the 614** settings are already distro-neutral: `/etc/sysctl.d`, `/etc/modprobe.d`, `/etc/sudoers.d`, `/etc/audit/rules.d` and the journald, resolved and NetworkManager drop-in directories work the same way everywhere. Two reload commands and three unit names are resolved per family:
+**672 of the 689** settings are distro-neutral: `/etc/default/grub`, `/etc/sysctl.d`, `/etc/modprobe.d`, `/etc/sudoers.d`, `/etc/audit/rules.d` and the journald, resolved and NetworkManager drop-in directories work the same way everywhere. Two reload commands and three unit names are resolved per family:
 
 | Debian | Arch | Fedora · openSUSE |
 |---|---|---|
@@ -202,18 +209,21 @@ About **370 of the 614** settings are already distro-neutral: `/etc/sysctl.d`, `
 | `ssh.service` | `sshd.service` | `sshd.service` |
 | `smbd` · `nmbd` · `rsync` | `smb` · `nmb` · `rsyncd` | `smb` · `nmb` · `rsyncd` |
 
-These do **not** translate and are Debian-shaped today:
+The grub section **used to be** on this list, because it wrote `/etc/default/grub.d/99-oss.cfg` — a Debian invention that Fedora and Arch's `grub-mkconfig` never reads. It now merges into `/etc/default/grub` itself, which every family reads, so the restriction is gone and its 61 settings work everywhere.
+
+That was worth doing for its own sake, drop-in or not. Splitting the truth across two files meant the `GRUB_CMDLINE_LINUX_DEFAULT` you read in `/etc/default/grub` was not the line that booted, and anything you set there by hand was silently overridden by a drop-in sourced after it. An upgrade removes a stale `99-oss.cfg` on the next apply, because grub sources it *after* the real file and it would otherwise quietly outrank everything merged in.
+
+These still do **not** translate:
 
 | Section | Problem elsewhere |
 |---|---|
-| grub (54 settings) | `/etc/default/grub.d/` is a Debian invention — Fedora and Arch's `grub-mkconfig` never reads it |
 | updates (17 settings) | writes `/etc/apt/apt.conf.d`; Fedora uses `dnf-automatic`, Arch has no equivalent |
 | pam (39 settings) | edits `login.defs` in place, but on Fedora the PAM stack belongs to `authselect`, which overwrites it |
 | ufw · apparmor · packages · integrity | need firewalld, SELinux, and dnf/rpm or pacman backends |
 
-The two whose target file has no equivalent — grub and updates — declare `families = ["debian"]` and are skipped entirely elsewhere, in the GUI and independently in the helper. Substituting only their reload command would have been worse than leaving them alone: `grub2-mkconfig` would run happily while the drop-in it was meant to activate sat in a directory nothing reads.
+`updates` is the only section whose target file has no equivalent at all, so it declares `families = ["debian"]` and is skipped entirely elsewhere — in the GUI and independently in the helper. Substituting only a reload command would be worse than leaving it alone: the command would run happily while the file it was meant to activate sat where nothing reads it.
 
-**Until that's finished, treat the Arch and RPM packages as unfinished.** They give you roughly 370 of the 614 settings and are honest about the rest.
+**The Arch and RPM packages are still behind the Debian one**, but much less so than before: 672 of the 689 settings apply everywhere, and the sections that don't are skipped honestly rather than written and ignored.
 
 ### Why no AppImage, Flatpak or Snap
 
@@ -242,7 +252,7 @@ The Arch and RPM wrappers build a source tarball from your working tree, includi
 
 ```bash
 PYTHONPATH=src python3 oss              # run from the tree
-python3 -m unittest discover -s tests   # 234 tests
+python3 -m unittest discover -s tests   # 285 tests
 python3 tools/audit-targets.py          # check every target against this system
 python3 tools/screenshot.py out.png --section ufw
 python3 tools/build_presets.py          # regenerate the derived presets
@@ -268,11 +278,10 @@ Terminal palettes were designed for terminal text, and a fair few fall well unde
 
 Contributions are very welcome. This is a large idea with a lot of surface still open, and most of what's missing doesn't need deep knowledge of the codebase — it needs someone who knows a distro, or a subsystem, better than I do.
 
-**The biggest gap is distro support.** About 370 of the 614 settings already work everywhere; the rest are Debian-shaped, and each one is a self-contained piece of work:
+**The biggest gap is distro support.** 672 of the 689 settings already work everywhere; the rest are Debian-shaped, and each one is a self-contained piece of work:
 
 | Where help is most useful | What it involves |
 |---|---|
-| **grub on Arch and Fedora** | `/etc/default/grub.d/` is a Debian invention. Needs a different strategy for the 54 settings that depend on it. |
 | **A firewalld backend** | The ufw section needs an equivalent for Fedora and openSUSE. |
 | **SELinux alongside AppArmor** | The AppArmor page has no counterpart on Fedora or RHEL. |
 | **dnf and pacman backends** | For the packages and integrity sections, which are apt- and dpkg-shaped today. |
@@ -288,7 +297,7 @@ Contributions are very welcome. This is a large idea with a lot of surface still
 ### Before you open a PR
 
 ```bash
-python3 -m unittest discover -s tests   # 234 tests, must stay green
+python3 -m unittest discover -s tests   # 285 tests, must stay green
 python3 tools/audit-targets.py          # if you touched any target path
 ./tools/packaging-gate.sh               # if you touched packaging
 ```

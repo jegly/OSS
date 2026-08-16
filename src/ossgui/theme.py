@@ -24,10 +24,10 @@ from pathlib import Path
 
 from . import paths
 
-#: Default body opacity for glass mode. The guide's suggested starting point;
-#: below ~0.5 text stops being readable on GNOME, which does not blur behind
-#: app windows (KDE/KWin does).
-GLASS_ALPHA_DEFAULT = 0.78
+#: Default body opacity for glass mode. Below ~0.5 text stops being readable on
+#: GNOME, which does not blur behind app windows (KDE/KWin does), so the floor
+#: below is not just taste.
+GLASS_ALPHA_DEFAULT = 0.60
 GLASS_ALPHA_MIN = 0.50
 GLASS_ALPHA_MAX = 1.0
 
@@ -204,14 +204,14 @@ class Scheme:
 class Settings:
     """What the user picked in the appearance panel."""
 
-    family: str = "catppuccin"  # catppuccin | dracula | ptyxis
+    family: str = "ptyxis"  # catppuccin | dracula | ptyxis
     flavor: str = "mocha"  # catppuccin flavor / dracula base
     accent: str = "mauve"  # catppuccin or dracula accent
-    palette: str = "ptyxis_nord"  # ptyxis palette key
+    palette: str = "ptyxis_twilight"  # ptyxis palette key
     monochrome_accents: bool = False
-    glass: bool = False
+    glass: bool = True
     glass_alpha: float = GLASS_ALPHA_DEFAULT
-    font: str = "system"
+    font: str = "quicksand"
     font_scale: float = 1.0
 
     def clamped_alpha(self) -> float:
@@ -571,9 +571,16 @@ def base_css(scheme: Scheme, settings: Settings) -> str:
 .flag-card.risk-breaking {{ border-color: {mix(scheme.base, scheme.error, 0.45)}; }}
 .flag-card.risk-one-way {{ border-color: {mix(scheme.base, scheme.error, 0.7)}; }}
 .flag-card.unavailable {{ opacity: 0.45; }}
+/* Advisory is not unavailable: the card is live and selectable, it just
+   carries a note. Dimmed a little to say "probably not for you", nowhere near
+   the 0.45 that reads as disabled. */
+.flag-card.advisory {{ opacity: 0.82; }}
 
 .flag-title {{ font-weight: 500; color: {scheme.text}; }}
 .flag-desc {{ color: {dim}; font-size: 0.9em; }}
+/* Which hardware a CPU mitigation applies to. Italic and smaller than desc:
+   it is reference material, read deliberately, not part of the description. */
+.flag-affects {{ color: {dim}; font-size: 0.82em; font-style: italic; }}
 .flag-key {{
   font-family: {MONO_FAMILY};
   font-size: 0.82em;

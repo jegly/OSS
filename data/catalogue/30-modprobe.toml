@@ -1108,8 +1108,9 @@ default = "0"
 title   = "thunderbolt"
 desc    = "Thunderbolt — PCIe over cable"
 why     = "These buses grant direct memory access to whatever is plugged in"
+extra   = ["blacklist thunderbolt_net", "install thunderbolt_net /bin/false"]
 risk    = "caution"
-breaks  = "Docks, eGPUs, TB displays"
+breaks  = "Docks, eGPUs, TB displays, and IP-over-Thunderbolt networking"
 
 [[flag]]
 id      = "mod_pcmcia"

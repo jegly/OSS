@@ -505,3 +505,186 @@ title   = "Don't expose auth details"
 desc    = "Keeps auth info out of the session"
 why     = "Otherwise the session environment carries how you authenticated, for anything in it to read"
 risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  brute-force resistance
+#
+#  OpenSSH 9.8 moved rate limiting into sshd itself. On a machine running it,
+#  these do what fail2ban was installed for, without the extra daemon. sshd -t
+#  rejects an unknown directive, and the helper runs that before installing, so
+#  an older sshd refuses the file rather than silently ignoring the line.
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "ssh_per_source_penalties"
+group   = "ssh / limits"
+key     = "PerSourcePenalties"
+value   = "yes"
+default = "no"
+title   = "Penalise failing sources"
+desc    = "Escalating timeouts per source address"
+why     = "A source that keeps failing authentication is progressively refused, which is what stops a distributed password guess without a log-scraping daemon"
+risk    = "safe"
+breaks  = "Needs OpenSSH 9.8 or newer; older sshd will reject the config outright"
+
+[[flag]]
+id      = "ssh_per_source_max_startups"
+group   = "ssh / limits"
+key     = "PerSourceMaxStartups"
+value   = "4"
+default = "none"
+title   = "Cap sessions per source"
+desc    = "Four unauthenticated connections per address"
+why     = "MaxStartups alone is global, so one host can fill the whole unauthenticated queue and lock everyone else out"
+risk    = "safe"
+breaks  = "Needs OpenSSH 9.8+. Too low a value breaks legitimate parallel tooling like Ansible forks"
+
+[[flag]]
+id      = "ssh_unused_connection_timeout"
+group   = "ssh / limits"
+key     = "UnusedConnectionTimeout"
+value   = "300"
+default = "none"
+title   = "Drop idle multiplexed sessions"
+desc    = "Closes connections holding no channel"
+why     = "A ControlMaster socket left open is a live authenticated session sitting on the machine with nothing using it"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  authentication methods that should not be on
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "ssh_gssapi_off"
+group   = "ssh / authentication"
+key     = "GSSAPIAuthentication"
+value   = "no"
+default = "no"
+title   = "No GSSAPI auth"
+desc    = "Kerberos single sign-on off"
+why     = "Adds a whole authentication path and its key exchange to the attack surface for a feature almost no desktop uses"
+risk    = "safe"
+breaks  = "Kerberos/Active Directory single sign-on over SSH"
+
+[[flag]]
+id      = "ssh_kerberos_off"
+group   = "ssh / authentication"
+key     = "KerberosAuthentication"
+value   = "no"
+default = "no"
+title   = "No Kerberos auth"
+desc    = "Password-to-KDC validation off"
+why     = "Same reasoning as GSSAPI: an authentication path that is enabled by default and almost never used"
+risk    = "safe"
+breaks  = "Kerberos realms"
+
+[[flag]]
+id      = "ssh_ignore_user_known_hosts"
+group   = "ssh / authentication"
+key     = "IgnoreUserKnownHosts"
+value   = "yes"
+default = "no"
+title   = "Ignore user known_hosts"
+desc    = "Only root's list counts for host-based auth"
+why     = "With host-based authentication on, a user's own ~/.ssh/known_hosts would otherwise let them nominate which hosts to trust"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_pubkey_verify_required"
+group   = "ssh / authentication"
+key     = "PubkeyAuthOptions"
+value   = "verify-required"
+default = "none"
+title   = "Require the security key touch"
+desc    = "FIDO2 keys must verify the user"
+why     = "Without it a resident FIDO2 key authenticates on possession alone; with it the key demands a PIN or biometric first"
+risk    = "breaking"
+breaks  = "Locks out every key that is not a verifying FIDO2 token — ordinary ed25519 and RSA keys stop working"
+
+# --------------------------------------------------------------------------- #
+#  forwarding limits
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "ssh_permit_open_none"
+group   = "ssh / forwarding"
+key     = "PermitOpen"
+value   = "none"
+default = "any"
+title   = "No local forward targets"
+desc    = "-L cannot reach anything"
+why     = "AllowTcpForwarding no is the blunt version; this keeps forwarding usable while naming nothing it may reach"
+risk    = "caution"
+breaks  = "Any ssh -L tunnel, and tools like VS Code Remote that build one"
+
+[[flag]]
+id      = "ssh_permit_listen_none"
+group   = "ssh / forwarding"
+key     = "PermitListen"
+value   = "none"
+default = "any"
+title   = "No remote forward listeners"
+desc    = "-R cannot open a port"
+why     = "A remote forward turns your server into an entry point for whatever is on the other end of the client's connection"
+risk    = "caution"
+breaks  = "ssh -R reverse tunnels"
+
+[[flag]]
+id      = "ssh_stream_local_bind_unlink"
+group   = "ssh / forwarding"
+key     = "StreamLocalBindUnlink"
+value   = "yes"
+default = "no"
+title   = "Clean up forwarded sockets"
+desc    = "Removes stale Unix sockets"
+why     = "A leftover socket file from a dead session is a path another process can sit on and answer for"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  crypto & session hygiene
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "ssh_rekey_limit"
+group   = "ssh / crypto"
+key     = "RekeyLimit"
+value   = "512M 1h"
+default = "default none"
+title   = "Rekey regularly"
+desc    = "New keys every 512 MB or hour"
+why     = "Bounds how much traffic any single session key protects, so recovering one key exposes a slice rather than the session"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_ca_signature_algorithms"
+group   = "ssh / crypto"
+key     = "CASignatureAlgorithms"
+value   = "ssh-ed25519,ecdsa-sha2-nistp256,rsa-sha2-512,rsa-sha2-256"
+default = "includes ssh-rsa"
+title   = "Modern CA signatures only"
+desc    = "Drops SHA-1 from certificate checks"
+why     = "The certificate path has its own algorithm list, so restricting HostKeyAlgorithms leaves SHA-1 usable for CA-signed logins"
+risk    = "caution"
+breaks  = "An internal SSH CA still issuing ssh-rsa (SHA-1) certificates"
+
+[[flag]]
+id      = "ssh_fingerprint_hash"
+group   = "ssh / logging"
+key     = "FingerprintHash"
+value   = "sha256"
+default = "sha256"
+title   = "SHA-256 fingerprints"
+desc    = "No MD5 in the logs"
+why     = "An MD5 fingerprint in an audit log cannot be relied on to identify a key"
+risk    = "safe"
+
+[[flag]]
+id      = "ssh_print_last_log"
+group   = "ssh / logging"
+key     = "PrintLastLog"
+value   = "yes"
+default = "yes"
+title   = "Show the last login"
+desc    = "Prints when and from where, at login"
+why     = "The cheapest intrusion detection there is: the user sees a login they did not make"
+risk    = "safe"

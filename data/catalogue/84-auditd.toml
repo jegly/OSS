@@ -133,21 +133,38 @@ desc    = "AppArmor profile edits"
 why     = "Weakening a profile is quieter than disabling AppArmor outright"
 risk    = "safe"
 
+#  This bundled five watches, three of which point at paths that do not exist on
+#  a current Ubuntu: /var/run/utmp (systemd 256 dropped utmp), /var/run/faillock
+#  (created on demand by pam_faillock) and, historically, wtmp/btmp. auditctl
+#  loads a rule file as a set, so one missing path fails *every* rule in it —
+#  enabling this took the whole audit configuration down with it, silently.
+#  `needs` gates a whole flag, so the only correct fix is one watch per flag,
+#  each gated on its own path. wtmp, btmp and utmp are separate flags below.
+
 [[flag]]
 id      = "audit_logins"
 group   = "auditd / watches"
 key     = "-w /var/log/lastlog -p wa -k logins"
 value   = "1"
 default = "0"
-extra   = [
-  "-w /var/run/faillock -p wa -k logins",
-  "-w /var/log/wtmp -p wa -k session",
-  "-w /var/log/btmp -p wa -k session",
-  "-w /var/run/utmp -p wa -k session",
-]
-title   = "Logins and sessions"
-desc    = "Login records and session starts"
-why     = "Editing wtmp to erase a login is a textbook cleanup step"
+title   = "Last-login records"
+desc    = "Writes to /var/log/lastlog"
+why     = "lastlog is what reports when each account last logged in; editing it hides that a dormant account was used"
+needs   = ["path:/var/log/lastlog"]
+risk    = "safe"
+
+[[flag]]
+id      = "audit_faillock"
+group   = "auditd / watches"
+key     = "-w /var/run/faillock -p wa -k logins"
+value   = "1"
+default = "0"
+title   = "Failed-login counters"
+desc    = "Writes to /var/run/faillock"
+why     = "pam_faillock's counters are what lock an account after repeated failures, so clearing them resets a brute-force attempt"
+#  Created on demand the first time pam_faillock records a failure, so it is
+#  routinely absent on a healthy machine.
+needs   = ["path:/var/run/faillock"]
 risk    = "safe"
 
 [[flag]]
@@ -279,15 +296,31 @@ risk    = "safe"
 # --------------------------------------------------------------------------- #
 
 [[flag]]
+#  /etc/sysctl.d is the directory this app writes to and always exists;
+#  /etc/sysctl.conf is the legacy file and is absent on a current Ubuntu, so it
+#  was the key and would have failed the whole rule set. Swapped: the directory
+#  that exists is the watch, and the legacy file is its own gated flag.
 id      = "audit_kernel_params"
+group   = "auditd / watches"
+key     = "-w /etc/sysctl.d/ -p wa -k sysctl"
+value   = "1"
+default = "0"
+title   = "sysctl config changes"
+desc    = "Edits under /etc/sysctl.d"
+why     = "This is the directory this app writes to — knowing when it changes outside the app is worth having"
+needs   = ["path:/etc/sysctl.d"]
+risk    = "safe"
+
+[[flag]]
+id      = "audit_sysctl_conf"
 group   = "auditd / watches"
 key     = "-w /etc/sysctl.conf -p wa -k sysctl"
 value   = "1"
 default = "0"
-extra   = ["-w /etc/sysctl.d/ -p wa -k sysctl"]
-title   = "sysctl config changes"
-desc    = "Edits to sysctl.conf and sysctl.d"
-why     = "This is the same file this app writes to — knowing when it changes outside the app is worth having"
+title   = "Legacy sysctl.conf changes"
+desc    = "Edits to /etc/sysctl.conf"
+why     = "Still read when present, and still outranks nothing — but a file most machines no longer ship"
+needs   = ["path:/etc/sysctl.conf"]
 risk    = "safe"
 
 [[flag]]
@@ -361,6 +394,10 @@ group   = "auditd / watches"
 key     = "-w /etc/audit/ -p wa -k auditconfig"
 value   = "1"
 default = "0"
+#  Ships with auditd, so it exists whenever this section is available at all —
+#  gated anyway, because a rule file is loaded as a set and one missing path
+#  fails every other rule in it.
+needs   = ["path:/etc/audit"]
 title   = "audit's own config"
 desc    = "Edits to /etc/audit/ itself"
 why     = "Rules can no longer be changed once -e 2 is set, but an attempt to is itself worth a log line — this rule has to load before -e 2 locks the file, so it belongs earlier and does"
@@ -426,3 +463,156 @@ desc    = "The bpf() syscall by users"
 why     = "A loaded BPF program can read kernel memory or filter packets — legitimate uses exist, but so do rootkits built entirely on it"
 risk    = "caution"
 breaks  = "Anything using eBPF for tracing or networking logs a line each time"
+
+# --------------------------------------------------------------------------- #
+#  identity files the original identity rule missed
+#
+#  The existing rule watches /etc/passwd alone. Adding a user touches passwd,
+#  shadow, group and gshadow; changing a password or a group membership may
+#  touch only one of the other three, and none of those were recorded.
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "audit_identity_shadow"
+group   = "auditd / watches"
+key     = "-w /etc/shadow -p wa -k identity"
+value   = "1"
+default = "0"
+title   = "Password hash changes"
+desc    = "Writes to /etc/shadow"
+why     = "Every password change and every account with a hash edited into it by hand lands here and nowhere else"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_identity_group"
+group   = "auditd / watches"
+key     = "-w /etc/group -p wa -k identity"
+value   = "1"
+default = "0"
+title   = "Group membership changes"
+desc    = "Writes to /etc/group"
+why     = "Adding an account to sudo, adm or docker is a privilege escalation and it is written here"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_identity_gshadow"
+group   = "auditd / watches"
+key     = "-w /etc/gshadow -p wa -k identity"
+value   = "1"
+default = "0"
+title   = "Group password changes"
+desc    = "Writes to /etc/gshadow"
+why     = "Completes the identity set — a group password is a way into a group without being listed in it"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_session_wtmp"
+group   = "auditd / watches"
+key     = "-w /var/log/wtmp -p wa -k session"
+value   = "1"
+default = "0"
+title   = "Login records"
+desc    = "Writes to /var/log/wtmp"
+why     = "wtmp is what `last` reads; editing it is the standard way to remove evidence of a login"
+needs   = ["path:/var/log/wtmp"]
+risk    = "safe"
+
+[[flag]]
+id      = "audit_session_btmp"
+group   = "auditd / watches"
+key     = "-w /var/log/btmp -p wa -k session"
+value   = "1"
+default = "0"
+title   = "Failed login records"
+desc    = "Writes to /var/log/btmp"
+why     = "btmp holds failed attempts, so it is the file that shows a password guess in progress"
+needs   = ["path:/var/log/btmp"]
+risk    = "safe"
+
+[[flag]]
+id      = "audit_session_utmp"
+group   = "auditd / watches"
+key     = "-w /var/run/utmp -p wa -k session"
+value   = "1"
+default = "0"
+title   = "Active session records"
+desc    = "Writes to /var/run/utmp"
+why     = "utmp lists who is logged in now, which is what an intruder edits to not be there"
+#  systemd 256 dropped utmp, so Ubuntu 26.04 and equivalents have no such file.
+#  Without this gate the watch loads, auditctl rejects the missing path, and the
+#  whole rule set — every other rule in this section — fails with it.
+needs   = ["path:/var/run/utmp"]
+risk    = "safe"
+
+[[flag]]
+id      = "audit_time_localtime"
+group   = "auditd / watches"
+key     = "-w /etc/localtime -p wa -k time-change"
+value   = "1"
+default = "0"
+title   = "Timezone changes"
+desc    = "Writes to /etc/localtime"
+why     = "Moving the clock is how log timestamps are made to disagree with everyone else's"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_hosts_file"
+group   = "auditd / watches"
+key     = "-w /etc/hosts -p wa -k system-locale"
+value   = "1"
+default = "0"
+title   = "Hosts file changes"
+desc    = "Writes to /etc/hosts"
+why     = "One line in /etc/hosts redirects a name to an attacker's address and outranks DNS entirely"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_passwd_binary"
+group   = "auditd / watches"
+key     = "-w /usr/bin/passwd -p x -k privileged"
+value   = "1"
+default = "0"
+title   = "passwd invocations"
+desc    = "Execution of /usr/bin/passwd"
+why     = "The sudo binary is already watched; passwd is the other setuid path routinely used to take an account over"
+risk    = "safe"
+
+# --------------------------------------------------------------------------- #
+#  syscalls the permission rule missed
+# --------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "audit_perm_chown"
+group   = "auditd / syscalls"
+key     = "-a always,exit -F arch=b64 -S chown,fchown,fchownat,lchown -F auid>=1000 -F auid!=4294967295 -k perm_mod"
+value   = "1"
+default = "0"
+title   = "Ownership changes"
+desc    = "chown and its variants"
+why     = "The existing perm_mod rule covers chmod and xattrs but not chown, so giving a file away was the one permission change that went unrecorded"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_clock_adjtime"
+group   = "auditd / syscalls"
+key     = "-a always,exit -F arch=b64 -S clock_adjtime -k time-change"
+value   = "1"
+default = "0"
+title   = "Fine clock adjustments"
+desc    = "clock_adjtime syscall"
+why     = "adjtimex and settimeofday are already watched; clock_adjtime is the third way to move the clock and was not"
+risk    = "safe"
+
+[[flag]]
+id      = "audit_module_binaries"
+group   = "auditd / watches"
+key     = "-w /usr/sbin/insmod -p x -k modules"
+value   = "1"
+default = "0"
+title   = "Module tool use"
+desc    = "Execution of insmod"
+why     = "The syscall rule catches loading a module; this catches the tool being run, which survives a syscall rule being flushed"
+extra   = ["-w /usr/sbin/modprobe -p x -k modules", "-w /usr/sbin/rmmod -p x -k modules"]
+#  All three are kmod symlinks and live in /sbin on some families.
+needs   = ["path:/usr/sbin/insmod", "path:/usr/sbin/modprobe", "path:/usr/sbin/rmmod"]
+risk    = "safe"

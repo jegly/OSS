@@ -431,6 +431,27 @@ class ReviewDialog(Adw.Window):
                 group.add(self._row(" ".join(change.command), change.why))
             page.add(group)
 
+        if self.window.module_blacklist:
+            from .. import kmod as kmod_module
+
+            names = sorted(self.window.module_blacklist)
+            group = Adw.PreferencesGroup(
+                title="Kernel debloat",
+                description=(
+                    f"Written to {kmod_module.TARGET}, then depmod and an "
+                    f"initramfs rebuild — the initramfs carries its own copy of "
+                    f"modprobe.d, so without that a blacklisted module still "
+                    f"loads during early boot. Delete the file to undo all of it."
+                ),
+            )
+            group.add(
+                self._row(
+                    f"{len(names)} module(s) blacklisted",
+                    ", ".join(names[:20]) + ("…" if len(names) > 20 else ""),
+                )
+            )
+            page.add(group)
+
         if self.window.package_removals:
             cascade = self.window.package_cascade
             selected = sorted(self.window.package_removals)

@@ -393,20 +393,28 @@ class TestStagingIsMinimal(SandboxCase):
     touch.
     """
 
-    def _staging(self):
+    def _staging(self, files: dict | None = None):
+        """Staging built from *supplied* facts, never from the host.
+
+        These used to call probe.gather() and probe.read_target_files(), which
+        read the real /etc — OSS_ROOT only relocates writes, not reads. So on any
+        machine that already had an /etc/sysctl.d/99-oss.conf the app adopted its
+        values and both tests failed, for a reason that had nothing to do with
+        the code under test. The invariant is about a pristine machine, so the
+        test supplies one.
+        """
         from ossgui.staging import Staging
 
-        facts = probe.gather(self.catalogue)
+        facts = probe.SystemFacts(
+            files=files or {}, cmdline=[], modules=set(), units={},
+            gsettings={}, vulnerabilities={},
+        )
         return Staging.from_system(self.catalogue, facts), facts
 
     def test_nothing_staged_means_an_empty_plan(self) -> None:
         staging, _facts = self._staging()
         self.assertEqual(staging.changed_count, 0)
-        plan = render.render(
-            self.catalogue,
-            staging.selection,
-            current=probe.read_target_files(self.catalogue),
-        )
+        plan = render.render(self.catalogue, staging.selection, current={})
         self.assertTrue(plan.is_empty, "a freshly opened app must propose nothing")
 
     def test_one_toggle_touches_one_file(self) -> None:
@@ -414,11 +422,7 @@ class TestStagingIsMinimal(SandboxCase):
         staging.set("printk_quiet", "3 3 3 3")
         self.assertEqual(staging.changed_ids(), ["printk_quiet"])
 
-        plan = render.render(
-            self.catalogue,
-            staging.selection,
-            current=probe.read_target_files(self.catalogue),
-        )
+        plan = render.render(self.catalogue, staging.selection, current={})
         self.assertEqual([w.path for w in plan.writes], ["/etc/sysctl.d/99-oss.conf"])
         body = [l for l in plan.writes[0].content.splitlines() if l and not l.startswith("#")]
         self.assertEqual(body, ["kernel.printk = 3 3 3 3"])
@@ -474,12 +478,29 @@ class TestInPlaceFilesAreNotOurs(SandboxCase):
         self.assertEqual(probe.on_disk_value(section, flag, facts), "365")
 
     def test_matching_logindefs_value_is_not_rewritten(self) -> None:
-        """A whitespace-only diff would claim the file is changing when it is not."""
+        """A whitespace-only diff would claim the file is changing when it is not.
+
+        The managed line must survive byte for byte: rewriting `UMASK 077` as
+        `UMASK\t077` is a diff that changes nothing and makes review claim the
+        file is being modified when it is not.
+
+        The banner is a different matter and is expected to be added. It is what
+        probe.is_ours() reads, and without it on_disk_value() refuses to read an
+        in-place file back — so a flag staged against a value the distribution
+        already happened to set was written and then still reported as "not set
+        by us", forever. Adopting the file is the real change here; the line
+        staying identical is what this test is guarding.
+        """
+        from ossgui import branding
+
         current = {"/etc/login.defs": "UMASK 077\n"}
         section = self.catalogue.section("pam")
         flag = next(f for f in section.flags if f.key == "UMASK")
         plan = render.render_section(section, {flag.id: "077"}, current=current)
-        self.assertEqual(plan.writes, [], "identical content must not be rewritten")
+
+        self.assertEqual(len(plan.writes), 1)
+        body = plan.writes[0].content[len(branding.IN_PLACE):]
+        self.assertEqual(body, "UMASK 077\n", "the managed line must not be rewritten")
 
     def test_the_marker_is_actually_in_the_banner(self) -> None:
         """The recogniser and the banner must not drift apart.

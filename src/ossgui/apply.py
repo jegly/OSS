@@ -36,7 +36,7 @@ from . import bootloader as bootloader_module
 from . import filemode as filemode_module
 from . import fstab as fstab_module
 from . import permissions as permissions_module
-from . import distro, probe, render, ufw as ufw_module, units as units_module
+from . import distro, kmod as kmod_module, probe, render, ufw as ufw_module, units as units_module
 from . import sandbox as sandbox_module
 from . import packages as packages_module
 from . import snapd as snapd_module
@@ -189,6 +189,23 @@ def backup(path: Path) -> Path | None:
         stat = path.stat()
         os.chown(destination, stat.st_uid, stat.st_gid)
     return destination
+
+
+def _mode_for(write: "render.FileWrite", path: Path) -> int:
+    """The mode to write *path* with.
+
+    A drop-in we own gets the mode the renderer asked for. An in-place target is
+    a file that already existed with a mode somebody chose, so that mode is kept:
+    the permissions section offers to tighten /etc/default/grub and
+    /etc/login.defs to 0600, and rewriting them at the renderer's default 0644
+    would quietly undo a hardening step this same app had just applied.
+    """
+    if not write.in_place:
+        return write.mode
+    try:
+        return path.stat().st_mode & 0o777
+    except OSError:
+        return write.mode
 
 
 def write_atomic(path: Path, content: str, mode: int) -> None:
@@ -488,7 +505,7 @@ def apply_plan(
             path = target_path(write.path)
             if backup(path) is not None:
                 result.steps.append(Step("backup", f"{write.path} -> {write.path}{BACKUP_SUFFIX}"))
-            write_atomic(path, write.content, write.mode)
+            write_atomic(path, write.content, _mode_for(write, path))
             touched.append(path)
             result.steps.append(Step("write", write.path))
 
@@ -530,6 +547,8 @@ def apply_plan(
             apply_usb(extras["usb"], result, touched)
         if "filemode" in extras:
             apply_filemode(extras["filemode"], result)
+        if "debloat" in extras:
+            apply_debloat(extras["debloat"], result, touched)
 
         # Package removal goes last of all: it is the only step that cannot be
         # rolled back by restoring a file, so everything else should already have
@@ -973,6 +992,50 @@ def apply_permissions(changes: list, result: Result) -> None:
             )
 
 
+def apply_debloat(names: list, result: Result, touched: list) -> None:
+    """Write the debloat blacklist drop-in.
+
+    Its own file rather than the curated section's: this one is generated from a
+    browser and can run to thousands of lines, and keeping them apart means
+    reverting one does not disturb the other. An empty selection removes the
+    file, which is what unticking everything should mean.
+    """
+    path = target_path(kmod_module.TARGET)
+    selected = kmod_module.from_payload(names)
+
+    if not selected:
+        if path.exists():
+            backup(path)
+            path.unlink()
+            touched.append(path)
+            result.steps.append(Step("remove", kmod_module.TARGET))
+        return
+
+    backup(path)
+    write_atomic(path, kmod_module.render_blacklist(selected), 0o644)
+    touched.append(path)
+    result.steps.append(
+        Step("write", f"{kmod_module.TARGET} — {len(selected)} module(s) blacklisted")
+    )
+    _reload_modules(result)
+
+
+def _reload_modules(result: Result) -> None:
+    """Make a modprobe.d change take effect.
+
+    depmod rebuilds the dependency index; the initramfs carries its own copy of
+    modprobe.d, so without regenerating it a module blacklisted here still loads
+    during early boot. Resolved per family — update-initramfs is Debian's, Arch
+    uses mkinitcpio and Fedora dracut.
+    """
+    for command in (("/usr/sbin/depmod", "-a"), ("/usr/sbin/update-initramfs", "-u")):
+        argv = distro.resolve_command(command)
+        code, output = run(list(argv))
+        result.steps.append(Step("command", shlex.join(argv), code == 0, output))
+        if code != 0:
+            raise ApplyError(f"{shlex.join(argv)} failed: {output}")
+
+
 def apply_filemode(changes: list, result: Result) -> None:
     """Change the mode of arbitrary paths, journalling the before-state first.
 
@@ -1352,6 +1415,9 @@ def run_payload(catalogue: Catalogue, payload: dict) -> Result:
         "fstab": (fstab_module.from_payload, fstab_module.FstabError),
         "usb": (usb_module.from_payload, usb_module.UsbError),
         "filemode": (filemode_module.from_payload, filemode_module.ModeError),
+        # Every module name is pattern-checked here, before it reaches a line in
+        # modprobe.d — this runs as root and the names come from the GUI.
+        "debloat": (kmod_module.from_payload, kmod_module.ModuleError),
     }
     for key, (parser, error_type) in parsers.items():
         if key in payload:

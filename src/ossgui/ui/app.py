@@ -102,12 +102,26 @@ class OssApplication(Adw.Application):
             application_name="OSS",
             application_icon=paths.APP_ID,
             version=__version__,
+            developer_name="jegly",
+            # Written without a scheme, and deliberately not passed as the
+            # `website` or `issue_url` properties. Those make Adw.AboutWindow
+            # render a clickable link that hands a URI to the browser, and this
+            # app has no network capability of any kind — the packaging gate
+            # greps the whole source for URL schemes and fails on a match, which
+            # is exactly the promise it should be enforcing. These are here to
+            # be read and typed, not clicked.
             comments=(
                 "Pick hardening flags, review the exact diff, apply once.\n\n"
-                "Every section is one drop-in file — deleting it reverts that "
-                "section to stock."
+                "Most sections are one drop-in file — deleting it reverts that "
+                "section to stock. A few edit a file the distribution owns "
+                "(/etc/default/grub, /etc/login.defs); those keep a .bak beside "
+                "the original instead.\n\n"
+                "jegly.xyz  ·  github.com/jegly"
             ),
-            license_type=Gtk.License.GPL_3_0,
+            # Apache-2.0, matching the LICENSE file. This said GPL_3_0, which is
+            # a different licence with different obligations for anyone
+            # redistributing the app.
+            license_type=Gtk.License.APACHE_2_0,
         )
         mark_solid(about)
         about.present()

@@ -91,6 +91,31 @@ class FirewallPage(Gtk.Box):
         logging_row.connect("notify::selected", self._on_logging)
         group.add(logging_row)
         self.logging_row = logging_row
+
+        # Read-only on purpose. IPV6 lives in /etc/default/ufw and ufw has no CLI
+        # verb for it, so a switch here would stage a change that plan_commands
+        # has no command to emit — a toggle that reports success and does
+        # nothing is worse than a line of text that tells the truth.
+        ipv6 = Adw.ActionRow(
+            title=f"IPv6 filtering is {'on' if state.ipv6 else 'off'}",
+            subtitle=(
+                "Read from /etc/default/ufw. ufw has no command for this, so it is "
+                "shown rather than offered: set IPV6=yes there and run "
+                "“ufw disable && ufw enable” to change it."
+                if state.ipv6
+                else "IPV6=no in /etc/default/ufw means none of the rules below "
+                "apply to IPv6 traffic at all, while the machine still has IPv6 "
+                "addresses. Set IPV6=yes there and run “ufw disable && ufw enable”."
+            ),
+        )
+        ipv6.set_subtitle_lines(4)
+        icon = Gtk.Image.new_from_icon_name(
+            "emblem-ok-symbolic" if state.ipv6 else "dialog-warning-symbolic"
+        )
+        if not state.ipv6:
+            icon.add_css_class("status-differs")
+        ipv6.add_prefix(icon)
+        group.add(ipv6)
         return group
 
     def _on_enabled(self, row: Adw.SwitchRow, *_args) -> None:
@@ -133,26 +158,32 @@ class FirewallPage(Gtk.Box):
             group.add(row)
             self.policy_rows[attribute] = row
 
-        preset = Adw.ActionRow(
-            title="Deny all incoming",
-            subtitle="The usual desktop posture: nothing reaches you unless you asked for it",
-        )
-        button = Gtk.Button(label="Apply posture", valign=Gtk.Align.CENTER)
-        button.connect("clicked", self._on_deny_incoming)
-        preset.add_suffix(button)
-        group.add(preset)
+        for label, subtitle, policies, caveat in ufw_module.POSTURES:
+            row = Adw.ActionRow(
+                title=label,
+                subtitle=subtitle + (f"  ⚠ {caveat}" if caveat else ""),
+            )
+            row.set_subtitle_lines(4)
+            if caveat:
+                icon = Gtk.Image.new_from_icon_name("dialog-warning-symbolic")
+                icon.add_css_class("status-pending-reboot")
+                row.add_prefix(icon)
+            button = Gtk.Button(label="Apply posture", valign=Gtk.Align.CENTER)
+            button.connect("clicked", self._on_posture, policies)
+            row.add_suffix(button)
+            group.add(row)
         return group
+
+    def _on_posture(self, _button: Gtk.Button, policies: dict) -> None:
+        for attribute, value in policies.items():
+            setattr(self.state, attribute, value)
+        self.state.enabled = True
+        self._changed()
 
     def _on_policy(self, row: Adw.ComboRow, _param, attribute: str) -> None:
         if self._updating:
             return
         setattr(self.state, attribute, ufw_module.POLICIES[row.get_selected()])
-        self._changed()
-
-    def _on_deny_incoming(self, _button: Gtk.Button) -> None:
-        self.state.default_incoming = "deny"
-        self.state.default_routed = "deny"
-        self.state.enabled = True
         self._changed()
 
     # -- quick block ----------------------------------------------------- #
@@ -167,7 +198,7 @@ class FirewallPage(Gtk.Box):
             ),
         )
 
-        entry_row = Adw.ActionRow(title="Custom port")
+        entry_row = Adw.ActionRow(title="Port, protocol and action")
         self.port_entry = Gtk.Entry(placeholder_text="443 or 6000:6010", width_chars=12)
         self.port_entry.set_valign(Gtk.Align.CENTER)
         self.proto_drop = Gtk.DropDown.new_from_strings(["tcp", "udp", "any"])
@@ -177,30 +208,74 @@ class FirewallPage(Gtk.Box):
         self.action_drop = Gtk.DropDown.new_from_strings(list(ufw_module.ACTIONS))
         self.action_drop.set_selected(1)  # deny
         self.action_drop.set_valign(Gtk.Align.CENTER)
+        self.action_drop.set_tooltip_text(
+            "limit is deny-after-six-attempts-a-minute — the usual answer for an "
+            "SSH port that has to stay open."
+        )
 
-        add = Gtk.Button(label="Add rule", valign=Gtk.Align.CENTER)
-        add.add_css_class("suggested-action")
-        add.connect("clicked", self._on_add_custom)
-
-        for widget in (self.port_entry, self.proto_drop, self.dir_drop, self.action_drop, add):
+        for widget in (self.port_entry, self.proto_drop, self.dir_drop, self.action_drop):
             entry_row.add_suffix(widget)
         group.add(entry_row)
 
-        flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE)
-        flow.set_max_children_per_line(4)
-        flow.set_column_spacing(6)
-        flow.set_row_spacing(6)
-        flow.set_margin_top(6)
-        flow.set_margin_bottom(6)
-        for port, proto, label in ufw_module.COMMON_PORTS:
-            button = Gtk.Button(label=f"{label}  {port}/{proto}")
-            button.set_tooltip_text(f"Add: deny in {port}/{proto}")
-            button.connect("clicked", self._on_add_common, port, proto, label)
-            flow.append(button)
+        # from/to have been in the Rule model and its validator all along; only
+        # the UI could not reach them, so a rule scoped to one subnet had to be
+        # written with the ufw CLI by hand.
+        where_row = Adw.ActionRow(
+            title="Source and destination",
+            subtitle="Leave as any for a rule that is not tied to an address. "
+            "Accepts a single address or a CIDR subnet.",
+        )
+        where_row.set_subtitle_lines(2)
+        self.from_entry = Gtk.Entry(placeholder_text="from: any", width_chars=18)
+        self.from_entry.set_valign(Gtk.Align.CENTER)
+        self.to_entry = Gtk.Entry(placeholder_text="to: any", width_chars=18)
+        self.to_entry.set_valign(Gtk.Align.CENTER)
+        where_row.add_suffix(self.from_entry)
+        where_row.add_suffix(self.to_entry)
+        group.add(where_row)
 
-        holder = Adw.PreferencesRow(activatable=False, selectable=False)
-        holder.set_child(flow)
-        group.add(holder)
+        comment_row = Adw.ActionRow(
+            title="Comment",
+            subtitle="Written into the rule, so the list still explains itself in "
+            "six months.",
+        )
+        comment_row.set_subtitle_lines(2)
+        self.comment_entry = Gtk.Entry(
+            placeholder_text="why this rule exists", width_chars=26
+        )
+        self.comment_entry.set_valign(Gtk.Align.CENTER)
+        comment_row.add_suffix(self.comment_entry)
+        add = Gtk.Button(label="Add rule", valign=Gtk.Align.CENTER)
+        add.add_css_class("suggested-action")
+        add.connect("clicked", self._on_add_custom)
+        comment_row.add_suffix(add)
+        group.add(comment_row)
+
+        for heading, entries in ufw_module.PORT_GROUPS:
+            label = Gtk.Label(label=heading, xalign=0)
+            label.add_css_class("heading")
+            label.add_css_class("dim-label")
+            label.set_margin_top(10)
+            label.set_margin_start(4)
+
+            flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE)
+            flow.set_max_children_per_line(4)
+            flow.set_column_spacing(6)
+            flow.set_row_spacing(6)
+            flow.set_margin_top(4)
+            flow.set_margin_bottom(4)
+            for port, proto, name in entries:
+                button = Gtk.Button(label=f"{name}  {port}/{proto}")
+                button.set_tooltip_text(f"Add: deny in {port}/{proto}")
+                button.connect("clicked", self._on_add_common, port, proto, name)
+                flow.append(button)
+
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            box.append(label)
+            box.append(flow)
+            holder = Adw.PreferencesRow(activatable=False, selectable=False)
+            holder.set_child(box)
+            group.add(holder)
         return group
 
     def _on_add_common(self, _button, port: str, proto: str, label: str) -> None:
@@ -214,6 +289,9 @@ class FirewallPage(Gtk.Box):
             direction=("in", "out")[self.dir_drop.get_selected()],
             port=self.port_entry.get_text().strip(),
             proto=("tcp", "udp", "any")[self.proto_drop.get_selected()],
+            from_addr=self.from_entry.get_text().strip() or "any",
+            to_addr=self.to_entry.get_text().strip() or "any",
+            comment=self.comment_entry.get_text().strip(),
         )
         self._add_rule(rule)
 
@@ -228,6 +306,9 @@ class FirewallPage(Gtk.Box):
             return
         self.state.rules.append(rule)
         self.port_entry.set_text("")
+        self.from_entry.set_text("")
+        self.to_entry.set_text("")
+        self.comment_entry.set_text("")
         self._changed()
 
     # -- rule list ------------------------------------------------------- #

@@ -217,9 +217,20 @@ class State:
 
         suggestions = [
             (
+                Rule("allow", "out", "53", "udp", comment="DNS"),
+                "Plain DNS. Without it nothing resolves a name, which presents as "
+                "every application being broken rather than as a firewall problem.",
+            ),
+            (
+                Rule("allow", "out", "53", "tcp", comment="DNS over TCP"),
+                "DNS falls back to TCP for large answers and for zone transfers. "
+                "Allowing only UDP works until an answer does not fit in a datagram.",
+            ),
+            (
                 Rule("allow", "out", "123", "udp", comment="NTP time sync"),
                 "Without this systemd-timesyncd cannot reach a time server and the "
-                "clock drifts — silently, because nothing reports it.",
+                "clock drifts — silently, because nothing reports it. A wrong clock "
+                "then breaks TLS certificate validation.",
             ),
             (
                 Rule("allow", "out", "853", "tcp", comment="DNS over TLS"),
@@ -228,7 +239,20 @@ class State:
             ),
             (
                 Rule("allow", "out", "67:68", "udp", comment="DHCP renewal"),
-                "Some strict setups need this for DHCP lease renewal.",
+                "Some strict setups need this for DHCP lease renewal. Losing the "
+                "lease takes the whole network interface with it.",
+            ),
+            (
+                Rule("allow", "out", "443", "tcp", comment="HTTPS"),
+                "Package updates, the software centre and almost everything else "
+                "outbound. Denying it is defensible on a server and rarely on a "
+                "desktop.",
+            ),
+            (
+                Rule("allow", "out", "80", "tcp", comment="HTTP"),
+                "Debian and Ubuntu mirrors still serve over plain HTTP, and OCSP "
+                "and CRL certificate-revocation checks use it. Without it apt may "
+                "hang rather than fail.",
             ),
         ]
         have = {(r.port, r.proto, r.direction) for r in self.rules if r.action == "allow"}
@@ -487,26 +511,111 @@ def from_payload(data: dict) -> State:
     )
 
 
-#: Ports worth offering as one-click blocks, with what they are.
-COMMON_PORTS = [
-    ("22", "tcp", "SSH"),
-    ("23", "tcp", "Telnet"),
-    ("80", "tcp", "HTTP"),
-    ("443", "tcp", "HTTPS"),
-    ("445", "tcp", "SMB file sharing"),
-    ("139", "tcp", "NetBIOS session"),
-    ("137:138", "udp", "NetBIOS name/datagram"),
-    ("3389", "tcp", "RDP remote desktop"),
-    ("5900:5910", "tcp", "VNC"),
-    ("631", "tcp", "CUPS printing"),
-    ("5353", "udp", "mDNS / Bonjour"),
-    ("1900", "udp", "SSDP / UPnP discovery"),
-    ("111", "tcp", "RPC portmapper"),
-    ("2049", "tcp", "NFS"),
-    ("623", "udp", "IPMI / BMC"),
-    ("161:162", "udp", "SNMP"),
-    ("3306", "tcp", "MySQL"),
-    ("5432", "tcp", "PostgreSQL"),
-    ("6379", "tcp", "Redis"),
-    ("27017", "tcp", "MongoDB"),
+#: One-click default-policy sets. ``(label, subtitle, policies, caveat)``.
+#: Policies map directly onto the three State attributes.
+POSTURES: list[tuple[str, str, dict[str, str], str]] = [
+    (
+        "Desktop",
+        "Nothing reaches you unless you asked for it; anything may go out.",
+        {"default_incoming": "deny", "default_outgoing": "allow", "default_routed": "deny"},
+        "",
+    ),
+    (
+        "Visible refusal",
+        "Same as Desktop, but refused connections get an answer instead of a "
+        "silent drop.",
+        {"default_incoming": "reject", "default_outgoing": "allow", "default_routed": "deny"},
+        "Reject tells a scanner the host is there. It is friendlier on a trusted "
+        "LAN and louder on a hostile network.",
+    ),
+    (
+        "Locked down",
+        "Deny in both directions. Only traffic you have written a rule for moves "
+        "at all.",
+        {"default_incoming": "deny", "default_outgoing": "deny", "default_routed": "deny"},
+        "This breaks DNS, NTP and updates the moment it is applied unless the "
+        "outbound allowances below are in place first. Add those, then switch.",
+    ),
 ]
+
+#: Ports worth offering as one-click blocks, grouped so the button grid reads as
+#: categories rather than as one wall of numbers. Everything here is a service
+#: that either should not be exposed at all, or is routinely exposed by accident.
+PORT_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
+    (
+        "Remote access",
+        [
+            ("22", "tcp", "SSH"),
+            ("23", "tcp", "Telnet"),
+            ("3389", "tcp", "RDP remote desktop"),
+            ("5900:5910", "tcp", "VNC"),
+            ("512:514", "tcp", "rsh / rlogin / rexec"),
+            ("5555", "tcp", "Android ADB"),
+        ],
+    ),
+    (
+        "File sharing",
+        [
+            ("445", "tcp", "SMB file sharing"),
+            ("139", "tcp", "NetBIOS session"),
+            ("137:138", "udp", "NetBIOS name/datagram"),
+            ("111", "tcp", "RPC portmapper"),
+            ("2049", "tcp", "NFS"),
+            ("21", "tcp", "FTP"),
+            ("69", "udp", "TFTP"),
+            ("873", "tcp", "rsync daemon"),
+            ("548", "tcp", "AFP / Netatalk"),
+        ],
+    ),
+    (
+        "Discovery & printing",
+        [
+            ("631", "tcp", "CUPS printing"),
+            ("5353", "udp", "mDNS / Bonjour"),
+            ("1900", "udp", "SSDP / UPnP discovery"),
+            ("5355", "udp", "LLMNR"),
+            ("3702", "udp", "WS-Discovery"),
+            ("1901", "udp", "UPnP events"),
+        ],
+    ),
+    (
+        "Databases & caches",
+        [
+            ("3306", "tcp", "MySQL"),
+            ("5432", "tcp", "PostgreSQL"),
+            ("6379", "tcp", "Redis"),
+            ("27017", "tcp", "MongoDB"),
+            ("11211", "tcp", "memcached"),
+            ("9200:9300", "tcp", "Elasticsearch"),
+            ("1433", "tcp", "MS SQL Server"),
+            ("5984", "tcp", "CouchDB"),
+        ],
+    ),
+    (
+        "Management & legacy",
+        [
+            ("623", "udp", "IPMI / BMC"),
+            ("161:162", "udp", "SNMP"),
+            ("25", "tcp", "SMTP"),
+            ("143", "tcp", "IMAP (cleartext)"),
+            ("110", "tcp", "POP3 (cleartext)"),
+            ("389", "tcp", "LDAP (cleartext)"),
+            ("6000:6063", "tcp", "X11 forwarding"),
+            ("2375", "tcp", "Docker API (unencrypted)"),
+        ],
+    ),
+    (
+        "Web & proxies",
+        [
+            ("80", "tcp", "HTTP"),
+            ("443", "tcp", "HTTPS"),
+            ("8080", "tcp", "HTTP alternate"),
+            ("8443", "tcp", "HTTPS alternate"),
+            ("3128", "tcp", "Squid proxy"),
+            ("8000", "tcp", "Dev server"),
+        ],
+    ),
+]
+
+#: Flat view, kept because presets and tests index it by port.
+COMMON_PORTS = [entry for _group, entries in PORT_GROUPS for entry in entries]

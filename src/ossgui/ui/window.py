@@ -88,6 +88,10 @@ class MainWindow(Adw.ApplicationWindow):
         self.usb_change: dict = {}
         #: "snap:plug" -> connect|disconnect.
         self.snap_changes: dict[str, str] = {}
+        #: Kernel modules staged for blacklisting by the debloat browser. Kept
+        #: apart from the curated modprobe flags: those are catalogue ids a
+        #: preset can carry, these are free-form names off the running kernel.
+        self.module_blacklist: set[str] = set()
         #: Package names selected for removal, and apt's answer about them.
         self.package_removals: set[str] = set()
         self.package_cascade = None
@@ -430,7 +434,8 @@ class MainWindow(Adw.ApplicationWindow):
             self.section_title.set_label("Overview")
             self.section_subtitle.set_label(
                 "Every flag in the catalogue, grouped by area. Enable anything from "
-                "here — it stages exactly as it would in its own section."
+                "here — it stages exactly as it would in its own section. The "
+                "sections that need their own editor are listed at the bottom."
             )
             groups = self.catalogue.by_group()
         else:
@@ -443,9 +448,12 @@ class MainWindow(Adw.ApplicationWindow):
                 self.grid_box.append(FirewallPage(self))
                 self._refresh_chrome()
                 return
-            if section_id in ("systemd", "bootloader", "permissions", "fstab", "usb"):
+            if section_id in (
+                "systemd", "bootloader", "permissions", "fstab", "usb", "tpm",
+            ):
                 from .pages import (
-                    BootloaderPage, FstabPage, PermissionsPage, SandboxPage, UsbPage,
+                    BootloaderPage, FstabPage, PermissionsPage, SandboxPage,
+                    TpmPage, UsbPage,
                 )
 
                 page = {
@@ -454,6 +462,7 @@ class MainWindow(Adw.ApplicationWindow):
                     "permissions": PermissionsPage,
                     "fstab": FstabPage,
                     "usb": UsbPage,
+                    "tpm": TpmPage,
                 }[section_id]
                 self.grid_box.append(page(self))
                 self._refresh_chrome()
@@ -462,6 +471,12 @@ class MainWindow(Adw.ApplicationWindow):
                 from .packages_page import PackagesPage
 
                 self.grid_box.append(PackagesPage(self))
+                self._refresh_chrome()
+                return
+            if section_id == "debloat":
+                from .kmod_page import KmodPage
+
+                self.grid_box.append(KmodPage(self))
                 self._refresh_chrome()
                 return
             if section_id == "snap":
@@ -502,6 +517,11 @@ class MainWindow(Adw.ApplicationWindow):
                 for group in section.group_order
             ]
 
+        if section_id != OVERVIEW:
+            notice = self._missing_package_notice(self.catalogue.section(section_id))
+            if notice is not None:
+                self.grid_box.append(notice)
+
         shown = 0
         for owner_id, group, flags in groups:
             visible = [f for f in flags if self._passes_filters(f)]
@@ -525,11 +545,19 @@ class MainWindow(Adw.ApplicationWindow):
                     self.staging,
                     self.states.get(flag.id),
                     self._unavailable_reason(section, flag),
+                    self._advisory_note(flag),
                 )
                 self._cards.append(card)
                 flow.append(card)
             self.grid_box.append(flow)
             shown += len(visible)
+
+        if section_id == OVERVIEW:
+            # by_group() only yields sections that have flags, so scrolling the
+            # Overview reached 14 of the 25 sidebar entries and gave no sign the
+            # other 11 existed. They cannot be rendered as cards — a rule list
+            # or a mount table is not a toggle — so they are listed and linked.
+            self.grid_box.append(self._dedicated_sections_group())
 
         if shown == 0:
             self.grid_box.append(self._empty_state())
@@ -562,6 +590,76 @@ class MainWindow(Adw.ApplicationWindow):
         for flow in self._flows:
             flow.set_min_children_per_line(columns)
             flow.set_max_children_per_line(columns)
+
+    def _dedicated_sections_group(self) -> Gtk.Widget:
+        """The sections Overview cannot show as cards, with a way into each."""
+        group = Adw.PreferencesGroup(
+            title="Sections with their own editor",
+            description=(
+                "These are not lists of toggles, so they have no cards to show "
+                "here. Everything they stage goes through the same review and "
+                "apply as the flags above."
+            ),
+        )
+        group.set_margin_top(14)
+
+        for section in self.catalogue.sections:
+            if any(section.id == owner for owner, _g, _f in self.catalogue.by_group()):
+                continue
+            row = Adw.ActionRow(title=section.title, subtitle=section.desc)
+            row.set_subtitle_lines(3)
+            row.set_activatable(True)
+            row.connect("activated", self._on_open_section, section.id)
+
+            open_button = Gtk.Button(label="Open", valign=Gtk.Align.CENTER)
+            open_button.connect("clicked", self._on_open_section, section.id)
+            row.add_suffix(open_button)
+            group.add(row)
+        return group
+
+    def _on_open_section(self, _widget, section_id: str) -> None:
+        self._show_section(section_id)
+
+    def _missing_package_notice(self, section: Section) -> Gtk.Widget | None:
+        """Why every card in this section is greyed out, said out loud.
+
+        The reason was already computed per flag and attached to each card as a
+        tooltip — but a card with a missing package is ``set_sensitive(False)``,
+        and GTK does not deliver motion events to an insensitive widget, so that
+        tooltip can never appear. The section read as uniformly dead with no
+        explanation anywhere on screen. This puts the same sentence, plus the
+        install command, where it cannot be missed.
+        """
+        if not section.requires_pkg or probe.package_present(section.requires_pkg):
+            return None
+
+        command = distro.install_hint(section.requires_pkg)
+        group = Adw.PreferencesGroup()
+        row = Adw.ActionRow(
+            title=f"{section.requires_pkg} is not installed",
+            subtitle=(
+                f"Nothing on this system reads "
+                f"{section.target or 'this section’s files'}, so these settings "
+                f"are shown for reference but cannot be staged or applied. "
+                f"Install it with:  {command}"
+            ),
+        )
+        row.set_subtitle_lines(4)
+        icon = Gtk.Image.new_from_icon_name("dialog-information-symbolic")
+        row.add_prefix(icon)
+
+        copy = Gtk.Button(label="Copy command", valign=Gtk.Align.CENTER)
+        copy.set_tooltip_text(command)
+        copy.connect("clicked", self._on_copy_install_hint, command)
+        row.add_suffix(copy)
+
+        group.add(row)
+        group.set_margin_bottom(8)
+        return group
+
+    def _on_copy_install_hint(self, _button: Gtk.Button, command: str) -> None:
+        self.get_clipboard().set(command)
+        self.toast(f"Copied:  {command}")
 
     def _show_pending(self, section: Section) -> None:
         """A section whose dedicated editor is not built yet — say so plainly."""
@@ -694,21 +792,40 @@ class MainWindow(Adw.ApplicationWindow):
         return True
 
     def _unavailable_reason(self, section: Section, flag) -> str:
+        """Why this flag *cannot* be set here. Empty means it can.
+
+        Strictly things that would not work: a key this kernel does not have, a
+        capability that is missing, a package that is not installed. "Your CPU
+        does not need this" is not one of them — see _advisory_note.
+        """
         state = self.states.get(flag.id)
         if state is not None and state.state is State.INVALID:
             return state.note
         for token in flag.needs:
             if not probe.has_capability(token):
                 return probe.capability_reason(token)
-        if flag.id in self.unaffected:
-            return (
-                "This CPU reports 'Not affected' for the vulnerability this "
-                "mitigates, so it would cost performance for nothing."
-            )
         if section.requires_pkg and not probe.package_present(section.requires_pkg):
             return (
                 f"Needs the {section.requires_pkg} package, which is not installed. "
                 f"Install it with:  {distro.install_hint(section.requires_pkg)}"
+            )
+        return ""
+
+    def _advisory_note(self, flag) -> str:
+        """Something worth knowing about this flag, which does not block it.
+
+        A mitigation for a bug this CPU reports as "Not affected" used to be
+        greyed out. That was wrong: the flag applies perfectly well, and there
+        are good reasons to set it anyway — a microcode update can change the
+        verdict, the kernel's answer is not always right, and a preset captured
+        here may be applied on a machine that *is* affected. So it is said, not
+        enforced.
+        """
+        if flag.id in self.unaffected:
+            return (
+                "This CPU reports 'Not affected' for the bug this mitigates, so "
+                "it will cost performance for no benefit here — but it still "
+                "applies, and it matters if this config moves to another machine."
             )
         return ""
 
@@ -750,6 +867,8 @@ class MainWindow(Adw.ApplicationWindow):
             extras["usb"] = dict(self.usb_change)
         if self.filemode_changes:
             extras["filemode"] = dict(self.filemode_changes)
+        if self.module_blacklist:
+            extras["debloat"] = sorted(self.module_blacklist)
         return extras
 
     def accounts_payload(self) -> dict:
@@ -789,6 +908,7 @@ class MainWindow(Adw.ApplicationWindow):
             + len(self.usb_change)
             + len(self.snap_changes)
             + len(self.package_removals)
+            + len(self.module_blacklist)
             + len(self.filemode_changes)
             + len(self.account_delete_users)
             + len(self.account_delete_groups)
@@ -883,7 +1003,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.apparmor = apparmor_module.read_unprivileged()
         for staged in (self.sandbox_changes, self.permission_changes,
                        self.fstab_changes, self.bootloader_change, self.usb_change,
-                       self.snap_changes, self.package_removals, self.filemode_changes,
+                       self.snap_changes, self.package_removals, self.module_blacklist,
+                       self.filemode_changes,
                        self.account_delete_users, self.account_delete_groups,
                        self.account_remove_member):
             staged.clear()
@@ -942,7 +1063,7 @@ class MainWindow(Adw.ApplicationWindow):
         for staged in (
             self.sandbox_changes, self.permission_changes, self.fstab_changes,
             self.usb_change, self.snap_changes, self.package_removals,
-            self.filemode_changes, self.account_delete_users,
+            self.module_blacklist, self.filemode_changes, self.account_delete_users,
             self.account_delete_groups, self.account_remove_member,
         ):
             staged.clear()

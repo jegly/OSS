@@ -1,3 +1,24 @@
+oss (1.0.0) unstable; urgency=medium
+
+  * Merge the grub section into /etc/default/grub instead of writing a
+    /etc/default/grub.d drop-in, and remove a stale drop-in from earlier
+    releases on the next apply.
+  * Stamp the banner on in-place login.defs edits, so the app can recognise
+    its own writes instead of reporting every login.defs flag as "didn't take".
+  * Preserve the existing mode on in-place writes, so applying grub settings
+    no longer resets /etc/default/grub from 0600 back to 0644.
+  * Drop net.ipv4/ipv6.conf.all.mc_forwarding: the sysfs entry is read-only,
+    so those two flags could never apply and were in every shipped preset.
+  * Show why a card is greyed out inside the card; a tooltip on an insensitive
+    widget is never displayed.
+  * Page through the unit and package browsers instead of capping them.
+  * Read live mount state in the fstab section, and show drift from fstab.
+  * Add the conf.default counterparts of the conf.all network settings, newer
+    CPU mitigations (ITS, TSA, VMSCAPE), more SSH, auditd and desktop flags,
+    and more firewall ports, postures and rule fields.
+
+ -- Jegly <jjjegly@gmail.com>  Sun, 16 Aug 2026 00:00:00 +0000
+
 oss (0.1.1) unstable; urgency=medium
 
   * Back up and restore the configuration files themselves, to and from a

@@ -17,8 +17,10 @@ from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
 from .. import units as units_module  # noqa: E402
 
-#: How many units to show before requiring a search — the full list is ~500 rows
-#: and building them all makes the page crawl.
+#: How many units to render at a time. The full list is ~500 rows and every row
+#: carries a live DropDown, so building all of them up front makes the page
+#: crawl. This is a page size, not a ceiling: "Show more" raises the limit and
+#: "Show all" removes it, and a new search drops back to one page.
 PAGE_LIMIT = 60
 
 ACTION_LABELS = {
@@ -52,6 +54,11 @@ class ServicesPage(Gtk.Box):
             out.append(units_module.Unit(name=name, state=state, sockets=sockets))
         return out
 
+    @property
+    def _limit(self) -> int:
+        """Rows to render. Lives on the window because the page is rebuilt."""
+        return getattr(self.window, "unit_limit", PAGE_LIMIT)
+
     def _filtered(self) -> tuple[list[units_module.Unit], int]:
         units = self._units()
         if self.show_listening_only:
@@ -62,7 +69,7 @@ class ServicesPage(Gtk.Box):
         # Staged units always stay visible, or they would vanish as you type.
         staged = [u for u in units if u.name in self.window.unit_changes]
         rest = [u for u in units if u.name not in self.window.unit_changes]
-        return (staged + rest)[:PAGE_LIMIT], total
+        return (staged + rest)[: self._limit], total
 
     def _rebuild(self) -> None:
         self.window._show_section(self.window.current_section)
@@ -155,13 +162,26 @@ class ServicesPage(Gtk.Box):
         for unit in shown:
             group.add(self._unit_row(unit))
 
-        if total > len(shown):
-            group.add(
-                Adw.ActionRow(
-                    title=f"{total - len(shown)} more not shown",
-                    subtitle="Narrow the filter to reach them.",
-                )
+        remaining = total - len(shown)
+        if remaining > 0:
+            row = Adw.ActionRow(
+                title=f"{remaining} more unit(s)",
+                subtitle="Filter to jump straight to one, or load them here.",
             )
+            more = Gtk.Button(
+                label=f"Show {min(PAGE_LIMIT, remaining)} more", valign=Gtk.Align.CENTER
+            )
+            more.connect("clicked", self._on_show_more)
+            row.add_suffix(more)
+
+            every = Gtk.Button(label=f"Show all {total}", valign=Gtk.Align.CENTER)
+            every.set_tooltip_text(
+                "Renders every matching unit. With no filter that is several "
+                "hundred rows and takes a moment."
+            )
+            every.connect("clicked", self._on_show_all, total)
+            row.add_suffix(every)
+            group.add(row)
         return group
 
     def _unit_row(self, unit: units_module.Unit) -> Adw.ActionRow:
@@ -205,10 +225,22 @@ class ServicesPage(Gtk.Box):
 
     def _on_search(self, entry: Gtk.SearchEntry) -> None:
         self.search = entry.get_text().strip().lower()
+        # A new filter starts at one page again: keeping an expanded limit means
+        # every keystroke re-renders hundreds of rows.
+        self.window.unit_limit = PAGE_LIMIT
         self._rebuild()
 
     def _on_listening_toggle(self, button: Gtk.ToggleButton) -> None:
         self.show_listening_only = button.get_active()
+        self.window.unit_limit = PAGE_LIMIT
+        self._rebuild()
+
+    def _on_show_more(self, _button: Gtk.Button) -> None:
+        self.window.unit_limit = self._limit + PAGE_LIMIT
+        self._rebuild()
+
+    def _on_show_all(self, _button: Gtk.Button, total: int) -> None:
+        self.window.unit_limit = total
         self._rebuild()
 
     def _on_action(self, drop: Gtk.DropDown, _param, name: str, options: list[str]) -> None:

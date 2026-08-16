@@ -69,6 +69,12 @@ class Flag:
     desc: str = ""
     why: str = ""
     help: str = ""
+    #: Which hardware a CPU-bug mitigation actually applies to, shown on the card
+    #: itself rather than in a tooltip. The kernel's "Not affected" is read from
+    #: the machine the app is running on, so it is right here and says nothing
+    #: about the machine a preset is later applied to — this line is what lets
+    #: someone tell the difference before applying it somewhere else.
+    affects: str = ""
     risk: str = "safe"
     breaks: str = ""
     reboot: bool = False
@@ -314,6 +320,7 @@ def _parse_flag(raw: dict, section: Section, path: Path) -> Flag:
         desc=str(raw.get("desc", "")),
         why=str(raw.get("why", "")),
         help=str(raw.get("help", "")),
+        affects=str(raw.get("affects", "")),
         risk=risk,
         breaks=str(raw.get("breaks", "")),
         reboot=bool(raw.get("reboot", False)),

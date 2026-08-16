@@ -10,6 +10,10 @@ id = "accept_local"
 value = "0"
 
 [[set]]
+id = "accept_local_default"
+value = "0"
+
+[[set]]
 id = "accept_redirects_all"
 value = "0"
 
@@ -70,7 +74,15 @@ id = "arp_accept"
 value = "0"
 
 [[set]]
+id = "arp_accept_default"
+value = "0"
+
+[[set]]
 id = "arp_announce"
+value = "2"
+
+[[set]]
+id = "arp_announce_default"
 value = "2"
 
 [[set]]
@@ -78,7 +90,15 @@ id = "arp_ignore"
 value = "1"
 
 [[set]]
+id = "arp_ignore_default"
+value = "1"
+
+[[set]]
 id = "audit_buffer"
+value = "1"
+
+[[set]]
+id = "audit_clock_adjtime"
 value = "1"
 
 [[set]]
@@ -90,7 +110,23 @@ id = "audit_failure_mode"
 value = "1"
 
 [[set]]
+id = "audit_hosts_file"
+value = "1"
+
+[[set]]
 id = "audit_identity"
+value = "1"
+
+[[set]]
+id = "audit_identity_group"
+value = "1"
+
+[[set]]
+id = "audit_identity_gshadow"
+value = "1"
+
+[[set]]
+id = "audit_identity_shadow"
 value = "1"
 
 [[set]]
@@ -118,6 +154,10 @@ id = "audit_modprobe_config"
 value = "1"
 
 [[set]]
+id = "audit_module_binaries"
+value = "1"
+
+[[set]]
 id = "audit_modules"
 value = "1"
 
@@ -130,15 +170,27 @@ id = "audit_network_env"
 value = "1"
 
 [[set]]
-id = "audit_own_config"
-value = "1"
-
-[[set]]
 id = "audit_pam_config"
 value = "1"
 
 [[set]]
+id = "audit_passwd_binary"
+value = "1"
+
+[[set]]
+id = "audit_perm_chown"
+value = "1"
+
+[[set]]
 id = "audit_privileged_cmds"
+value = "1"
+
+[[set]]
+id = "audit_session_btmp"
+value = "1"
+
+[[set]]
+id = "audit_session_wtmp"
 value = "1"
 
 [[set]]
@@ -154,11 +206,23 @@ id = "audit_time_changes"
 value = "1"
 
 [[set]]
+id = "audit_time_localtime"
+value = "1"
+
+[[set]]
 id = "bc_forwarding"
 value = "0"
 
 [[set]]
+id = "bc_forwarding_default"
+value = "0"
+
+[[set]]
 id = "bootp_relay"
+value = "0"
+
+[[set]]
+id = "bootp_relay_default"
 value = "0"
 
 [[set]]
@@ -230,7 +294,15 @@ id = "drop_gratuitous_arp"
 value = "1"
 
 [[set]]
+id = "drop_gratuitous_arp_default"
+value = "1"
+
+[[set]]
 id = "drop_unicast_in_l2_multicast"
+value = "1"
+
+[[set]]
+id = "drop_unicast_in_l2_multicast_default"
 value = "1"
 
 [[set]]
@@ -342,6 +414,10 @@ id = "idle_delay"
 value = "300"
 
 [[set]]
+id = "init_mlocked_on_free"
+value = "1"
+
+[[set]]
 id = "init_on_alloc"
 value = "1"
 
@@ -374,11 +450,23 @@ id = "ipv6_accept_ra_from_local"
 value = "0"
 
 [[set]]
+id = "ipv6_accept_ra_from_local_default"
+value = "0"
+
+[[set]]
 id = "ipv6_accept_ra_min_hop_limit"
 value = "64"
 
 [[set]]
+id = "ipv6_accept_ra_min_hop_limit_default"
+value = "64"
+
+[[set]]
 id = "ipv6_accept_ra_rtr_pref"
+value = "0"
+
+[[set]]
+id = "ipv6_accept_ra_rtr_pref_default"
 value = "0"
 
 [[set]]
@@ -402,7 +490,15 @@ id = "ipv6_accept_untracked_na"
 value = "0"
 
 [[set]]
+id = "ipv6_accept_untracked_na_default"
+value = "0"
+
+[[set]]
 id = "ipv6_drop_unicast_in_l2_multicast"
+value = "1"
+
+[[set]]
+id = "ipv6_drop_unicast_in_l2_multicast_default"
 value = "1"
 
 [[set]]
@@ -410,11 +506,15 @@ id = "ipv6_drop_unsolicited_na"
 value = "1"
 
 [[set]]
-id = "ipv6_mc_forwarding"
-value = "0"
+id = "ipv6_drop_unsolicited_na_default"
+value = "1"
 
 [[set]]
 id = "ipv6_router_solicitations"
+value = "0"
+
+[[set]]
+id = "ipv6_router_solicitations_default"
 value = "0"
 
 [[set]]
@@ -422,7 +522,15 @@ id = "ipv6_temp_prefered_lft"
 value = "3600"
 
 [[set]]
+id = "ipv6_temp_prefered_lft_default"
+value = "3600"
+
+[[set]]
 id = "ipv6_temp_valid_lft"
+value = "7200"
+
+[[set]]
+id = "ipv6_temp_valid_lft_default"
 value = "7200"
 
 [[set]]
@@ -510,6 +618,10 @@ id = "legacy_tiocsti"
 value = "0"
 
 [[set]]
+id = "location_disabled"
+value = "false"
+
+[[set]]
 id = "lock_delay"
 value = "0"
 
@@ -527,6 +639,10 @@ value = "true"
 
 [[set]]
 id = "log_martians"
+value = "1"
+
+[[set]]
+id = "log_martians_default"
 value = "1"
 
 [[set]]
@@ -586,8 +702,12 @@ id = "max_time_namespaces"
 value = "0"
 
 [[set]]
-id = "mc_forwarding_v4"
-value = "0"
+id = "media_automount_open"
+value = "false"
+
+[[set]]
+id = "media_autorun_never"
+value = "true"
 
 [[set]]
 id = "mmap_min_addr"
@@ -1222,6 +1342,30 @@ id = "printk_quiet"
 value = "3 3 3 3"
 
 [[set]]
+id = "privacy_hide_identity"
+value = "true"
+
+[[set]]
+id = "privacy_old_files_age"
+value = "7"
+
+[[set]]
+id = "privacy_old_temp"
+value = "true"
+
+[[set]]
+id = "privacy_recent_files"
+value = "false"
+
+[[set]]
+id = "privacy_technical_reports"
+value = "false"
+
+[[set]]
+id = "privacy_usage_stats"
+value = "false"
+
+[[set]]
 id = "promote_secondaries_all"
 value = "1"
 
@@ -1247,6 +1391,10 @@ value = "1"
 
 [[set]]
 id = "proxy_arp"
+value = "0"
+
+[[set]]
+id = "proxy_arp_default"
 value = "0"
 
 [[set]]
@@ -1350,6 +1498,14 @@ id = "route_localnet"
 value = "0"
 
 [[set]]
+id = "route_localnet_default"
+value = "0"
+
+[[set]]
+id = "search_providers_external"
+value = "true"
+
+[[set]]
 id = "secure_redirects_all"
 value = "0"
 
@@ -1368,6 +1524,14 @@ value = "0"
 [[set]]
 id = "shared_media"
 value = "0"
+
+[[set]]
+id = "shared_media_default"
+value = "0"
+
+[[set]]
+id = "shell_remember_mount_password"
+value = "false"
 
 [[set]]
 id = "show_in_lock_screen"
@@ -1438,7 +1602,15 @@ id = "ssh_expose_auth_info"
 value = "no"
 
 [[set]]
+id = "ssh_fingerprint_hash"
+value = "sha256"
+
+[[set]]
 id = "ssh_gateway_ports"
+value = "no"
+
+[[set]]
+id = "ssh_gssapi_off"
 value = "no"
 
 [[set]]
@@ -1448,6 +1620,14 @@ value = "no"
 [[set]]
 id = "ssh_ignore_rhosts"
 value = "yes"
+
+[[set]]
+id = "ssh_ignore_user_known_hosts"
+value = "yes"
+
+[[set]]
+id = "ssh_kerberos_off"
+value = "no"
 
 [[set]]
 id = "ssh_log_level"
@@ -1470,6 +1650,14 @@ id = "ssh_max_startups"
 value = "10:30:60"
 
 [[set]]
+id = "ssh_per_source_max_startups"
+value = "4"
+
+[[set]]
+id = "ssh_per_source_penalties"
+value = "yes"
+
+[[set]]
 id = "ssh_permit_empty_passwords"
 value = "no"
 
@@ -1486,7 +1674,19 @@ id = "ssh_permit_user_environment"
 value = "no"
 
 [[set]]
+id = "ssh_print_last_log"
+value = "yes"
+
+[[set]]
 id = "ssh_pubkey_authentication"
+value = "yes"
+
+[[set]]
+id = "ssh_rekey_limit"
+value = "512M 1h"
+
+[[set]]
+id = "ssh_stream_local_bind_unlink"
 value = "yes"
 
 [[set]]
@@ -1496,6 +1696,10 @@ value = "yes"
 [[set]]
 id = "ssh_tcp_keepalive"
 value = "no"
+
+[[set]]
+id = "ssh_unused_connection_timeout"
+value = "300"
 
 [[set]]
 id = "ssh_use_dns"

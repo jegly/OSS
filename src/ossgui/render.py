@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 import shlex
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from . import distro, probe
 from .catalogue import Catalogue, Flag, Section
@@ -250,6 +251,128 @@ def _body_grub(pairs: list[tuple[Flag, str]]) -> str:
     return body + "".join(assignments)
 
 
+#: A ``GRUB_*`` assignment in /etc/default/grub. The value is captured raw so a
+#: line we do not manage — GRUB_DISTRIBUTOR is a backtick command substitution —
+#: is passed through byte for byte rather than reparsed and re-quoted.
+_GRUB_ASSIGN = re.compile(r"^\s*(GRUB_[A-Z0-9_]+)\s*=(.*)$")
+
+#: The variable kernel tokens are merged into. GRUB_CMDLINE_LINUX would cover
+#: recovery entries as well, but the stock file puts boot flags here and this is
+#: the line a user reads to check what is set.
+_CMDLINE_VAR = "GRUB_CMDLINE_LINUX_DEFAULT"
+
+#: Where releases up to 0.1.1 wrote the grub section. grub-mkconfig sources
+#: /etc/default/grub.d/*.cfg *after* /etc/default/grub, so a leftover from an
+#: older version silently overrides everything merged into the real file — the
+#: exact failure this app exists to surface. It is removed on the next apply.
+LEGACY_GRUB_DROPIN = "/etc/default/grub.d/99-oss.cfg"
+
+
+def _strip_banner(content: str) -> str:
+    """Remove a banner we wrote on an earlier run.
+
+    Without this the banner is prepended again on every apply and the file grows
+    a fresh copy of the ASCII art each time.
+    """
+    for banner in (IN_PLACE_BANNER, BANNER):
+        if content.startswith(banner):
+            return content[len(banner):]
+    return content
+
+
+def _split_cmdline(value: str) -> list[str]:
+    """Kernel tokens from a ``GRUB_CMDLINE_*`` value.
+
+    The whole value is conventionally one quoted shell word whose *contents* are
+    the space-separated tokens, so shlex would hand back a single token 900
+    characters long. Unwrap the quotes and split the inside instead.
+
+    A token carrying its own quoted space — ``acpi_osi="!Windows 2020"`` — splits
+    in two here. That is vanishingly rare in a boot cmdline and the alternative
+    is a shell parser we would have to keep honest against grub's own.
+    """
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        value = value[1:-1]
+    return value.split()
+
+
+def _body_grub_inplace(
+    pairs: list[tuple[Flag, str]], owning: list[Flag], current: str
+) -> str:
+    """Merge the selection into an existing ``/etc/default/grub``.
+
+    Only the lines OSS manages are rewritten: the cmdline variable, and any
+    ``GRUB_*`` key that is itself a flag. Everything else — comments, blank
+    lines, GRUB_DISTRIBUTOR's command substitution — is passed through untouched,
+    because this file belongs to the distribution and the user, not to us.
+
+    Within the cmdline, every token whose key we manage is dropped before the
+    selected ones are appended. So unticking a flag removes its token, and a key
+    that was set twice by hand collapses to the single value now selected.
+    Tokens we do not manage (``quiet``, ``splash``, anything hand-added) keep
+    their order at the front.
+
+    A managed ``GRUB_*`` variable that is *not* selected is left exactly as it
+    was rather than deleted: the distribution ships GRUB_TIMEOUT and friends, and
+    removing a stock line is not what unticking a flag should mean. Restoring the
+    .bak is the documented undo for an in-place target.
+    """
+    managed_tokens = {f.key for f in owning if not f.key.startswith("GRUB_")}
+    managed_vars = {f.key for f in owning if f.key.startswith("GRUB_")}
+
+    wanted_tokens: list[str] = []
+    wanted_vars: dict[str, str] = {}
+    for flag, value in pairs:
+        if flag.key.startswith("GRUB_"):
+            wanted_vars[flag.key] = value
+        else:
+            wanted_tokens.append(flag.key if value == "" else f"{flag.key}={value}")
+
+    out: list[str] = []
+    seen_cmdline = False
+    seen_vars: set[str] = set()
+
+    for line in _strip_banner(current).splitlines(keepends=True):
+        match = _GRUB_ASSIGN.match(line)
+        name = match.group(1) if match else None
+
+        if name == _CMDLINE_VAR:
+            if seen_cmdline:
+                # A second assignment would silently override the merged one.
+                continue
+            seen_cmdline = True
+            kept = [
+                token
+                for token in _split_cmdline(match.group(2))
+                # `$GRUB_CMDLINE_LINUX_DEFAULT` is the drop-in's self-reference,
+                # meaningless once the value lives in this file.
+                if not token.startswith("$")
+                and token.partition("=")[0] not in managed_tokens
+            ]
+            out.append(f'{_CMDLINE_VAR}="{" ".join(kept + wanted_tokens)}"\n')
+            continue
+
+        if name in managed_vars and name in wanted_vars:
+            if name in seen_vars:
+                continue
+            seen_vars.add(name)
+            out.append(f"{name}={wanted_vars[name]}\n")
+            continue
+
+        out.append(line)
+
+    missing_vars = [(k, v) for k, v in wanted_vars.items() if k not in seen_vars]
+    if not seen_cmdline and wanted_tokens:
+        missing_vars.insert(0, (_CMDLINE_VAR, '"' + " ".join(wanted_tokens) + '"'))
+    if missing_vars:
+        if out and not out[-1].endswith("\n"):
+            out.append("\n")
+        out.append("\n# --- oss ---\n")
+        out.extend(f"{key}={value}\n" for key, value in missing_vars)
+    return "".join(out)
+
+
 def _body_auditd(pairs: list[tuple[Flag, str]]) -> str:
     # `-e 2` makes the rule set immutable, so it has to be the last line — every
     # rule after it would be rejected (§4.14).
@@ -376,12 +499,41 @@ def render_section(
         syntax = section.syntax_for(owning[0]) if owning else section.syntax
         in_place = section.in_place or any(f.in_place for f in owning)
 
+        if syntax == "grub" and in_place:
+            existing = current.get(target, "")
+            if Path(LEGACY_GRUB_DROPIN).exists():
+                plan.removes.append(
+                    FileRemove(path=LEGACY_GRUB_DROPIN, section=section.id)
+                )
+                touched = True
+            if not pairs and not probe.is_ours(existing):
+                # Nothing selected and we have never written this file: leave the
+                # distribution's own grub defaults exactly as they are.
+                continue
+            content = IN_PLACE_BANNER + _body_grub_inplace(pairs, owning, existing)
+            if content != existing:
+                plan.writes.append(
+                    FileWrite(
+                        path=target, content=content, in_place=True, section=section.id
+                    )
+                )
+                touched = True
+            continue
+
         if syntax == "logindefs":
             if not pairs:
                 continue  # nothing selected: leave the system file alone
             if target not in current:
                 raise RenderError(f"in-place target {target} needs its current content")
-            content = _body_logindefs(pairs, current[target])
+            # The banner is what probe.is_ours() looks for, and this branch was
+            # the one write path that never added it. Without it on_disk_value()
+            # refuses to read an in-place file back, so every login.defs flag
+            # reported "not set by us" immediately after being written — the app
+            # could not see its own edit. _strip_banner keeps it to one copy
+            # rather than prepending a fresh one on every apply.
+            content = IN_PLACE_BANNER + _body_logindefs(
+                pairs, _strip_banner(current[target])
+            )
             if content != current[target]:
                 plan.writes.append(
                     FileWrite(

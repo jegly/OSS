@@ -1535,16 +1535,13 @@ desc    = "Unicast inside a multicast frame"
 why     = "That combination only occurs when someone is crafting frames"
 risk    = "safe"
 
-[[flag]]
-id      = "mc_forwarding_v4"
-group   = "network / ipv4"
-key     = "net.ipv4.conf.all.mc_forwarding"
-value   = "0"
-default = "0"
-title   = "No multicast forwarding"
-desc    = "This machine is not a multicast router"
-why     = "Forwarding multicast turns a host into a relay for traffic it should ignore"
-risk    = "safe"
+#  net.ipv4.conf.all.mc_forwarding was offered here and has been removed.
+#  /proc/sys/net/ipv4/conf/*/mc_forwarding is mode 444 on every kernel: it
+#  reports whether a multicast routing daemon has claimed the interface, it does
+#  not configure anything. `sysctl -w` on it returns EPERM even as root, so the
+#  flag could only ever be written into 99-oss.conf and then fail on every
+#  `sysctl --system` — and it was in all five shipped presets. Multicast
+#  forwarding is off unless something like mrouted or smcroute turns it on.
 
 [[flag]]
 id      = "tcp_fastopen_off"
@@ -1710,16 +1707,8 @@ why     = "Forwarding turns a compromised host into a pivot"
 risk    = "caution"
 breaks  = "Container bridges and VPN gateways on IPv6"
 
-[[flag]]
-id      = "ipv6_mc_forwarding"
-group   = "network / ipv6"
-key     = "net.ipv6.conf.all.mc_forwarding"
-value   = "0"
-default = "0"
-title   = "No IPv6 multicast forwarding"
-desc    = "Won't relay multicast"
-why     = "Same reasoning as the IPv4 version"
-risk    = "safe"
+#  net.ipv6.conf.all.mc_forwarding removed for the same reason as the IPv4 one
+#  above: mode 444, a status file rather than a setting.
 
 [[flag]]
 id      = "ipv6_drop_unicast_in_l2_multicast"
@@ -1741,4 +1730,315 @@ default = "1"
 title   = "Ignore low-hop-limit RAs"
 desc    = "Rejects advertisements setting a tiny TTL"
 why     = "A hop limit of 1 confines your traffic to the local segment, where it can be read"
+risk    = "safe"
+
+# ------------------------------------------------------------------------- #
+#  conf.default counterparts — BUILD_PLAN §4.1.
+#
+#  Every key below already has a conf.all flag above. Setting only .all
+#  hardens the interfaces present when sysctl runs and leaves the template
+#  new ones are built from at the kernel default, so a VPN or container
+#  bridge that appears later comes up unhardened. Both are needed.
+# ------------------------------------------------------------------------- #
+
+[[flag]]
+id      = "log_martians_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.log_martians"
+value   = "1"
+default = "0"
+title   = "Log impossible packets (new)"
+desc    = "Records spoofed source addresses — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+breaks  = "Noisy logs on some networks"
+
+[[flag]]
+id      = "arp_ignore_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.arp_ignore"
+value   = "1"
+default = "0"
+title   = "Strict ARP replies (new)"
+desc    = "Only answers for the right interface — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "arp_announce_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.arp_announce"
+value   = "2"
+default = "0"
+title   = "Strict ARP announce (new)"
+desc    = "Uses the best local source address — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "drop_gratuitous_arp_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.drop_gratuitous_arp"
+value   = "1"
+default = "0"
+title   = "Drop gratuitous ARP (new)"
+desc    = "Ignores unsolicited ARP updates — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "shared_media_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.shared_media"
+value   = "0"
+default = "1"
+title   = "No shared media (new)"
+desc    = "Assumes one subnet per interface — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "bootp_relay_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.bootp_relay"
+value   = "0"
+default = "0"
+title   = "No BOOTP relay (new)"
+desc    = "Won't forward BOOTP/DHCP — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "proxy_arp_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.proxy_arp"
+value   = "0"
+default = "0"
+title   = "No proxy ARP (new)"
+desc    = "Won't answer ARP for others — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "conf_all_forwarding_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.forwarding"
+value   = "0"
+default = "0"
+title   = "No per-interface forwarding (new)"
+desc    = "Same, at interface level — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "caution"
+breaks  = "Container and VM bridges"
+
+[[flag]]
+id      = "ipv6_accept_ra_defrtr_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.accept_ra_defrtr"
+value   = "0"
+default = "1"
+title   = "No default route from RA (new)"
+desc    = "Won't take a gateway from an RA — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "caution"
+
+[[flag]]
+id      = "ipv6_accept_ra_pinfo_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.accept_ra_pinfo"
+value   = "0"
+default = "1"
+title   = "No prefixes from RA (new)"
+desc    = "Ignores advertised prefixes — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "caution"
+
+[[flag]]
+id      = "ipv6_accept_ra_rtr_pref_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.accept_ra_rtr_pref"
+value   = "0"
+default = "1"
+title   = "Ignore router preference (new)"
+desc    = "No RA priority games — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_router_solicitations_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.router_solicitations"
+value   = "0"
+default = "-1"
+title   = "Don't solicit routers (new)"
+desc    = "Stops asking for an RA — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_autoconf_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.autoconf"
+value   = "0"
+default = "1"
+title   = "No IPv6 autoconfig (new)"
+desc    = "Addresses come from you, not the LAN — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "caution"
+breaks  = "Automatic IPv6 addressing"
+
+[[flag]]
+id      = "ipv6_max_addresses_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.max_addresses"
+value   = "1"
+default = "16"
+title   = "Cap IPv6 addresses (new)"
+desc    = "One address per interface — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "caution"
+breaks  = "Privacy-extension temporary addresses"
+
+[[flag]]
+id      = "ipv6_temp_prefered_lft_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.temp_prefered_lft"
+value   = "3600"
+default = "86400"
+title   = "Rotate hourly (new)"
+desc    = "Preferred lifetime of a temp address — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_temp_valid_lft_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.temp_valid_lft"
+value   = "7200"
+default = "604800"
+title   = "Expire in two hours (new)"
+desc    = "Valid lifetime of a temp address — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "route_localnet_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.route_localnet"
+value   = "0"
+default = "0"
+title   = "No routing of 127.0.0.0/8 (new)"
+desc    = "Loopback stays loopback — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "accept_local_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.accept_local"
+value   = "0"
+default = "0"
+title   = "Reject own-address packets (new)"
+desc    = "Drops packets claiming a local source — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "arp_accept_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.arp_accept"
+value   = "0"
+default = "0"
+title   = "No new ARP from gratuitous (new)"
+desc    = "Won't learn hosts from unsolicited ARP — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "bc_forwarding_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.bc_forwarding"
+value   = "0"
+default = "0"
+title   = "No broadcast forwarding (new)"
+desc    = "Won't forward directed broadcasts — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "drop_unicast_in_l2_multicast_default"
+group   = "network / ipv4"
+key     = "net.ipv4.conf.default.drop_unicast_in_l2_multicast"
+value   = "1"
+default = "0"
+title   = "Drop mismatched unicast (new)"
+desc    = "Unicast inside a multicast frame — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_drop_unsolicited_na_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.drop_unsolicited_na"
+value   = "1"
+default = "0"
+title   = "Drop unsolicited NA (new)"
+desc    = "Ignores unrequested neighbour ads — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_accept_untracked_na_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.accept_untracked_na"
+value   = "0"
+default = "0"
+title   = "No untracked neighbour ads (new)"
+desc    = "Only accepts ads you asked for — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_accept_ra_from_local_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.accept_ra_from_local"
+value   = "0"
+default = "0"
+title   = "No RA from local addresses (new)"
+desc    = "Ignores advertisements from yourself — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_forwarding_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.forwarding"
+value   = "0"
+default = "0"
+title   = "No IPv6 forwarding (new)"
+desc    = "This machine is not an IPv6 router — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "caution"
+breaks  = "Container bridges and VPN gateways on IPv6"
+
+[[flag]]
+id      = "ipv6_drop_unicast_in_l2_multicast_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.drop_unicast_in_l2_multicast"
+value   = "1"
+default = "0"
+title   = "Drop mismatched unicast (v6) (new)"
+desc    = "Unicast inside a multicast frame — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
+risk    = "safe"
+
+[[flag]]
+id      = "ipv6_accept_ra_min_hop_limit_default"
+group   = "network / ipv6"
+key     = "net.ipv6.conf.default.accept_ra_min_hop_limit"
+value   = "64"
+default = "1"
+title   = "Ignore low-hop-limit RAs (new)"
+desc    = "Rejects advertisements setting a tiny TTL — for interfaces added later"
+why     = "`.all` covers the interfaces that exist now; this is the template every interface created later copies. A VPN, a container bridge or a USB tether appears after boot and would otherwise start unhardened"
 risk    = "safe"

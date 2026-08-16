@@ -19,6 +19,7 @@ from .. import filemode as filemode_module  # noqa: E402
 from .. import fstab as fstab_module  # noqa: E402
 from .. import permissions as permissions_module  # noqa: E402
 from .. import sandbox as sandbox_module  # noqa: E402
+from .. import tpm as tpm_module  # noqa: E402
 from .. import usb as usb_module  # noqa: E402
 
 
@@ -158,6 +159,161 @@ class SandboxPage(Gtk.Box):
 # --------------------------------------------------------------------------- #
 #  Bootloader (§4.23)
 # --------------------------------------------------------------------------- #
+
+
+class TpmPage(Gtk.Box):
+    """TPM state, measured boot, and what is actually sealed to it.
+
+    Read-only. Enrolling a disk key is deliberately not offered: getting it
+    wrong locks you out of your own disk, the recovery path is a passphrase you
+    may not have set, and the operation belongs to systemd-cryptenroll rather
+    than to a checkbox. What this page does is tell you where you stand and
+    what the exact command would be.
+    """
+
+    __gtype_name__ = "OssTpmPage"
+
+    def __init__(self, window) -> None:
+        super().__init__(orientation=Gtk.Orientation.VERTICAL)
+        self.window = window
+        self.facts = tpm_module.read_facts()
+        self.append(self._build())
+
+    def _build(self) -> Gtk.Widget:
+        return _column(
+            self._device_group(),
+            self._findings_group(),
+            self._volumes_group(),
+        )
+
+    def _device_group(self) -> Adw.PreferencesGroup:
+        facts = self.facts
+        group = Adw.PreferencesGroup(
+            title="The chip",
+            description=(
+                "A TPM stores keys in hardware and can refuse to release them "
+                "unless the machine booted the way it did when they were sealed. "
+                "On its own it protects nothing — what matters is what is bound "
+                "to it, below."
+            ),
+        )
+
+        if not facts.present:
+            row = _row(
+                "No TPM on this machine",
+                "/sys/class/tpm is empty, so the kernel registered no TPM. Either "
+                "the machine has none, or it is switched off in firmware — worth "
+                "checking the setup screen before concluding it is absent.",
+                lines=4,
+            )
+            icon = Gtk.Image.new_from_icon_name("dialog-information-symbolic")
+            row.add_prefix(icon)
+            group.add(row)
+            return group
+
+        group.add(_row(f"TPM {facts.version}", f"/dev/{facts.device}"))
+        if facts.description:
+            group.add(_row("Reported as", facts.description))
+        group.add(
+            _row(
+                "Resource manager",
+                "/dev/tpmrm0 present — several programs can use the TPM at once."
+                if facts.has_resource_manager
+                else "Absent. Anything using the TPM locks out everything else "
+                "while it holds the device open.",
+            )
+        )
+        group.add(
+            _row(
+                "Measured boot log",
+                {
+                    "present": "The firmware recorded what it hashed into the PCRs.",
+                    "unreadable": "Present but needs root to read.",
+                    "absent": "The firmware exposes no event log, so there is no "
+                    "record of what was measured.",
+                }[facts.event_log],
+            )
+        )
+        if facts.device_mode:
+            group.add(_row("Device permissions", f"mode {facts.device_mode}"))
+        return group
+
+    def _findings_group(self) -> Adw.PreferencesGroup | None:
+        findings = self.facts.findings
+        if not findings:
+            return None
+        group = Adw.PreferencesGroup(title="What this means")
+        for severity, message in findings:
+            row = _row(message, "", lines=6)
+            row.set_title_lines(6)
+            icon = Gtk.Image.new_from_icon_name(
+                "dialog-warning-symbolic" if severity == "high"
+                else "dialog-information-symbolic"
+            )
+            icon.add_css_class(
+                "status-differs" if severity == "high" else "status-not-set"
+            )
+            row.add_prefix(icon)
+            group.add(row)
+        return group
+
+    def _volumes_group(self) -> Adw.PreferencesGroup:
+        facts = self.facts
+        group = Adw.PreferencesGroup(
+            title="Encrypted volumes",
+            description=(
+                "From /etc/crypttab. A volume sealed to the TPM unlocks without a "
+                "passphrase, which is convenient and is also the whole risk: "
+                "without a PIN, powering the machine on is enough to decrypt it."
+            ),
+        )
+
+        if not facts.volumes:
+            group.add(
+                _row(
+                    "No encrypted volumes",
+                    "/etc/crypttab lists nothing, so there is no disk key for a "
+                    "TPM to hold.",
+                )
+            )
+            return group
+
+        for volume in facts.volumes:
+            if volume.tpm_bound:
+                pin = "with a PIN" if volume.tpm_pin else "with NO PIN"
+                pcrs = f", PCRs {volume.pcrs}" if volume.pcrs else ", no PCR binding"
+                subtitle = f"{volume.device} — sealed to the TPM {pin}{pcrs}"
+            else:
+                subtitle = (
+                    f"{volume.device} — unlocked by passphrase at boot, not sealed "
+                    f"to any hardware"
+                )
+            row = _row(volume.name, subtitle, lines=3)
+            icon = Gtk.Image.new_from_icon_name(
+                "dialog-warning-symbolic"
+                if volume.tpm_bound and not volume.tpm_pin
+                else "drive-harddisk-symbolic"
+            )
+            if volume.tpm_bound and not volume.tpm_pin:
+                icon.add_css_class("status-differs")
+            row.add_prefix(icon)
+            group.add(row)
+
+        if facts.present and not facts.bound_volumes:
+            hint = _row(
+                "Binding a volume to the TPM",
+                "This app does not do it: a mistake here locks you out of your own "
+                "disk. The command is  systemd-cryptenroll --tpm2-device=auto "
+                "--tpm2-with-pin=yes --tpm2-pcrs=7 <device>  — and keep the "
+                "existing passphrase enrolled as the recovery path.",
+                lines=5,
+            )
+            if "systemd-cryptenroll" not in facts.tools:
+                hint.set_subtitle(
+                    hint.get_subtitle() + "  systemd-cryptenroll is not installed here."
+                )
+            group.add(hint)
+        return group
 
 
 class BootloaderPage(Gtk.Box):
@@ -542,6 +698,7 @@ class FstabPage(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.window = window
         self.entries = fstab_module.read()
+        self.live = fstab_module.read_live()
         self.append(self._build())
 
     def _rebuild(self) -> None:
@@ -558,7 +715,7 @@ class FstabPage(Gtk.Box):
                 "refuses to write any entry whose live remount fails."
             ),
         )
-        groups = [warning]
+        groups = [warning, self._live_group()]
         for entry in self.entries:
             if entry.touchable:
                 groups.append(self._entry_group(entry))
@@ -575,24 +732,109 @@ class FstabPage(Gtk.Box):
             groups.append(group)
         return _column(*groups)
 
+    def _live_group(self) -> Adw.PreferencesGroup:
+        """What is mounted right now, and where it disagrees with fstab.
+
+        fstab is the request made at boot; /proc/mounts is the answer. A hardened
+        line in fstab that was never remounted, or a filesystem systemd mounts
+        that fstab never mentions, both look like success from the file alone.
+        """
+        drifted = fstab_module.drift(self.entries, self.live)
+        not_mounted = fstab_module.unmounted(self.entries, self.live)
+        missing = fstab_module.unlisted(self.entries, self.live)
+
+        group = Adw.PreferencesGroup(
+            title="Live state",
+            description=(
+                f"{len(self.live)} filesystem(s) mounted right now, read from "
+                f"/proc/mounts. fstab is what was asked for at boot; this is what "
+                f"the kernel is actually enforcing."
+            ),
+        )
+
+        if not drifted and not not_mounted and not missing:
+            group.add(
+                _row(
+                    "fstab and the running system agree",
+                    "Every entry below is mounted with the options its fstab line "
+                    "asks for.",
+                )
+            )
+            return group
+
+        for mount, (wanted, actual) in sorted(drifted.items()):
+            row = _row(
+                f"{mount} — mounted differently from fstab",
+                f"fstab asks for {', '.join(sorted(wanted)) or 'none'}; the kernel "
+                f"is enforcing {', '.join(sorted(actual)) or 'none'}. A remount or "
+                f"a reboot is what closes this gap.",
+            )
+            icon = Gtk.Image.new_from_icon_name("dialog-warning-symbolic")
+            icon.add_css_class("status-differs")
+            row.add_prefix(icon)
+            group.add(row)
+
+        for mount in missing:
+            recommended = ", ".join(fstab_module.RECOMMENDED[mount.mount][0])
+            have = ", ".join(sorted(mount.hardening)) or "none"
+            row = _row(
+                f"{mount.mount} is mounted but has no fstab entry",
+                f"Mounted as {mount.fstype} by systemd, currently with {have}. "
+                f"Recommended here: {recommended}. Toggling it needs an fstab line "
+                f"to exist first — this page edits entries, it does not create "
+                f"them.",
+            )
+            row.set_subtitle_lines(4)
+            icon = Gtk.Image.new_from_icon_name("dialog-information-symbolic")
+            icon.add_css_class("status-pending-reboot")
+            row.add_prefix(icon)
+            group.add(row)
+
+        if not_mounted:
+            group.add(
+                _row(
+                    f"{len(not_mounted)} fstab entr(ies) are not mounted",
+                    ", ".join(not_mounted)
+                    + ". Their options cannot be proved by a live remount, so "
+                    "staging them is refused.",
+                )
+            )
+        return group
+
     def _entry_group(self, entry: fstab_module.Entry) -> Adw.PreferencesGroup:
         staged = self.window.fstab_changes.get(entry.mount)
         chosen = set(staged) if staged is not None else set(entry.option_list)
 
+        mounted = self.live.get(entry.mount)
+        if mounted is None:
+            live_text = "not mounted right now"
+        else:
+            live_text = f"live: {mounted.options}"
+
         group = Adw.PreferencesGroup(
             title=f"{entry.mount}  ({entry.fstype})",
-            description=f"currently: {entry.options}"
+            description=f"fstab: {entry.options}  ·  {live_text}"
             + (f"  ·  {entry.caveat}" if entry.caveat else ""),
         )
         for option in fstab_module.HARDENING_OPTIONS:
             title, why = fstab_module.OPTION_HELP[option]
             recommended = option in entry.recommended
+            subtitle = why + ("  (recommended here)" if recommended else "")
+            # Per-option drift, so it is visible on the switch itself and not
+            # only in the summary above: an option present in fstab but not in
+            # /proc/mounts has not taken effect on this boot.
+            if mounted is not None and entry.has(option) != mounted.has(option):
+                subtitle += (
+                    "  ·  in fstab but not live — needs a remount"
+                    if entry.has(option)
+                    else "  ·  live but not in fstab — will not survive a reboot"
+                )
             row = Adw.SwitchRow(
                 title=f"{option} — {title}",
-                subtitle=why + ("  (recommended here)" if recommended else ""),
+                subtitle=subtitle,
                 active=option in chosen,
             )
-            row.set_subtitle_lines(2)
+            row.set_subtitle_lines(3)
             row.connect("notify::active", self._on_option, entry, option)
             group.add(row)
         return group

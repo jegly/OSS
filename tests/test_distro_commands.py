@@ -77,16 +77,20 @@ class TestSectionSupport(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.catalogue = catalogue.load()
 
-    def test_grub_and_updates_are_debian_only(self) -> None:
-        for section_id in ("grub", "updates"):
-            with self.subTest(section=section_id):
-                section = self.catalogue.section(section_id)
-                self.assertTrue(distro.section_supported(section, "debian"))
-                for family in ("arch", "fedora", "suse"):
-                    self.assertFalse(distro.section_supported(section, family))
+    def test_updates_is_debian_only(self) -> None:
+        # apt.conf.d has no equivalent elsewhere: Fedora schedules through
+        # dnf-automatic and Arch has nothing at all.
+        section = self.catalogue.section("updates")
+        self.assertTrue(distro.section_supported(section, "debian"))
+        for family in ("arch", "fedora", "suse"):
+            with self.subTest(family=family):
+                self.assertFalse(distro.section_supported(section, family))
 
     def test_portable_sections_apply_everywhere(self) -> None:
-        for section_id in ("sysctl", "ssh", "sudo", "auditd", "logging"):
+        # grub is on this list because the section edits /etc/default/grub in
+        # place. It was Debian-only while it wrote a /etc/default/grub.d drop-in,
+        # which only Debian's grub-mkconfig sources.
+        for section_id in ("sysctl", "ssh", "sudo", "auditd", "logging", "grub"):
             for family in ("debian", "arch", "fedora", "suse"):
                 with self.subTest(section=section_id, family=family):
                     section = self.catalogue.section(section_id)
@@ -107,8 +111,8 @@ class TestSectionSupport(unittest.TestCase):
         """
         import os
 
-        grub = self.catalogue.section("grub")
-        selection = {flag.id: flag.value for flag in grub.flags[:3]}
+        updates = self.catalogue.section("updates")
+        selection = {flag.id: flag.value for flag in updates.flags[:3]}
 
         os.environ["OSS_DISTRO_FAMILY"] = "fedora"
         self.addCleanup(os.environ.pop, "OSS_DISTRO_FAMILY", None)
@@ -119,7 +123,7 @@ class TestSectionSupport(unittest.TestCase):
 
         plan = render.render(self.catalogue, selection)
         self.assertEqual(
-            [w.path for w in plan.writes if "grub" in w.path], []
+            [w.path for w in plan.writes if "apt.conf" in w.path], []
         )
 
 

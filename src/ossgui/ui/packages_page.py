@@ -22,7 +22,10 @@ from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
 from .. import packages as packages_module  # noqa: E402
 
-#: The full list is ~1700 rows; building them all makes the page unusable.
+#: How many packages to render at a time. The full list is ~1700 rows and
+#: building them all makes the page unusable, so this is a page size rather than
+#: a ceiling: "Show more" raises the limit, "Show all" removes it, and changing
+#: the search or the manual-only toggle drops back to one page.
 SHOW_LIMIT = 40
 
 
@@ -147,6 +150,11 @@ class PackagesPage(Gtk.Box):
 
     # -- the list -------------------------------------------------------- #
 
+    @property
+    def _limit(self) -> int:
+        """Rows to render. Lives on the window because the page is rebuilt."""
+        return getattr(self.window, "package_limit", SHOW_LIMIT)
+
     def _visible(self) -> tuple[list, int]:
         search = getattr(self.window, "package_search", "")
         manual_only = getattr(self.window, "package_manual_only", True)
@@ -162,7 +170,7 @@ class PackagesPage(Gtk.Box):
             (p for p in candidates if p.name not in self.window.package_removals),
             key=lambda p: -p.size_kb,
         )
-        return (selected + rest)[:SHOW_LIMIT], total
+        return (selected + rest)[: self._limit], total
 
     def _list_group(self) -> Adw.PreferencesGroup:
         shown, total = self._visible()
@@ -198,12 +206,26 @@ class PackagesPage(Gtk.Box):
 
         for package in shown:
             group.add(self._package_row(package))
-        if total > len(shown):
-            group.add(
-                self._row(
-                    f"{total - len(shown)} more not shown", "Narrow the search."
-                )
+        remaining = total - len(shown)
+        if remaining > 0:
+            row = self._row(
+                f"{remaining} more package(s)",
+                "Search to jump straight to one, or load them here.",
             )
+            more = Gtk.Button(
+                label=f"Show {min(SHOW_LIMIT, remaining)} more", valign=Gtk.Align.CENTER
+            )
+            more.connect("clicked", self._on_show_more)
+            row.add_suffix(more)
+
+            every = Gtk.Button(label=f"Show all {total}", valign=Gtk.Align.CENTER)
+            every.set_tooltip_text(
+                "Renders every matching package. Unfiltered that is over a "
+                "thousand rows and takes a moment."
+            )
+            every.connect("clicked", self._on_show_all, total)
+            row.add_suffix(every)
+            group.add(row)
         return group
 
     def _package_row(self, package) -> Adw.ActionRow:
@@ -245,10 +267,22 @@ class PackagesPage(Gtk.Box):
 
     def _on_search(self, entry: Gtk.SearchEntry) -> None:
         self.window.package_search = entry.get_text().strip().lower()
+        # A new search starts at one page again: keeping an expanded limit means
+        # every keystroke re-renders hundreds of rows.
+        self.window.package_limit = SHOW_LIMIT
         self._rebuild()
 
     def _on_manual_toggle(self, button: Gtk.ToggleButton) -> None:
         self.window.package_manual_only = button.get_active()
+        self.window.package_limit = SHOW_LIMIT
+        self._rebuild()
+
+    def _on_show_more(self, _button: Gtk.Button) -> None:
+        self.window.package_limit = self._limit + SHOW_LIMIT
+        self._rebuild()
+
+    def _on_show_all(self, _button: Gtk.Button, total: int) -> None:
+        self.window.package_limit = total
         self._rebuild()
 
     def _on_clear(self, _button: Gtk.Button) -> None:

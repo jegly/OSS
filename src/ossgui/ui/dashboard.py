@@ -17,6 +17,16 @@ from gi.repository import Adw, GLib, Gtk  # noqa: E402
 from .. import probe, sysctl_chain  # noqa: E402
 from ..probe import State  # noqa: E402
 
+
+def _row(title: str, subtitle: str = "", lines: int = 3) -> Adw.ActionRow:
+    """A plain text row. Escaped, because sysfs strings reach this verbatim."""
+    row = Adw.ActionRow(title=GLib.markup_escape_text(title))
+    if subtitle:
+        row.set_subtitle(GLib.markup_escape_text(subtitle))
+    row.set_title_lines(2)
+    row.set_subtitle_lines(lines)
+    return row
+
 #: Order and presentation of the five states (§6).
 STATE_ROWS = [
     (State.APPLIED, "in effect", "status-applied", "●"),
@@ -58,9 +68,116 @@ class Dashboard(Gtk.Box):
         page = Adw.PreferencesPage()
         page.add(self._summary_group())
         page.add(self._findings_group())
+        page.add(self._vulnerabilities_group())
         page.add(self._layers_group())
         page.add(self._sections_group())
         return page
+
+    # -- CPU vulnerabilities -------------------------------------------- #
+
+    #: How each verdict is presented. The CSS classes are the same ones the
+    #: state dots use, so "vulnerable" reads like drift and "mitigated" like
+    #: applied without inventing a second colour vocabulary.
+    VERDICT_STYLE = {
+        "vulnerable": ("status-differs", "dialog-warning-symbolic", "vulnerable"),
+        "unknown": ("status-unknown", "dialog-question-symbolic", "unknown"),
+        "mitigated": ("status-applied", "emblem-ok-symbolic", "mitigated"),
+        "not-affected": ("status-not-set", "emblem-default-symbolic", "not affected"),
+    }
+
+    def _vulnerabilities_group(self) -> Adw.PreferencesGroup:
+        """What the CPU itself is exposed to, straight from sysfs.
+
+        This is the one part of the dashboard the catalogue cannot change: the
+        kernel decides what it can mitigate, and some of these have no fix
+        available at all. Worth showing precisely because a machine can be fully
+        hardened by this app and still be vulnerable here.
+        """
+        report = probe.vulnerability_report(self.window.facts)
+        if not report:
+            group = Adw.PreferencesGroup(title="CPU vulnerabilities")
+            group.add(
+                _row(
+                    "This kernel reports nothing",
+                    "/sys/devices/system/cpu/vulnerabilities does not exist, which "
+                    "means the kernel was built without the reporting it needs.",
+                )
+            )
+            return group
+
+        counts: dict[str, int] = {}
+        for _name, verdict, _raw in report:
+            counts[verdict] = counts.get(verdict, 0) + 1
+        vulnerable = counts.get("vulnerable", 0)
+
+        group = Adw.PreferencesGroup(
+            title="CPU vulnerabilities",
+            description=(
+                f"{len(report)} hardware bug(s) this kernel knows about: "
+                f"{counts.get('mitigated', 0)} mitigated, "
+                f"{counts.get('not-affected', 0)} this CPU is not affected by, "
+                f"{vulnerable} still vulnerable. Read from "
+                f"/sys/devices/system/cpu/vulnerabilities."
+            ),
+        )
+
+        for name, verdict, raw in report:
+            # "Not affected" is the boring majority; folding it keeps the panel
+            # to what is actually actionable.
+            if verdict == "not-affected":
+                continue
+            group.add(self._vulnerability_row(name, verdict, raw))
+
+        unaffected = [n for n, v, _ in report if v == "not-affected"]
+        if unaffected:
+            expander = Adw.ExpanderRow(
+                title=f"{len(unaffected)} this CPU is not affected by",
+                subtitle="Mitigating these costs performance for no benefit here. "
+                "Their flags are still selectable — the verdict can change with a "
+                "microcode update, and a preset captured here may be applied on a "
+                "machine that is affected.",
+            )
+            expander.set_subtitle_lines(2)
+            for name in unaffected:
+                expander.add_row(_row(name.replace("_", " "), "Not affected"))
+            group.add(expander)
+        return group
+
+    def _vulnerability_row(self, name: str, verdict: str, raw: str) -> Adw.ActionRow:
+        css, icon_name, label = self.VERDICT_STYLE.get(
+            verdict, ("status-unknown", "dialog-question-symbolic", verdict)
+        )
+        row = _row(f"{name.replace('_', ' ')}  —  {label}", raw)
+
+        icon = Gtk.Image.new_from_icon_name(icon_name)
+        icon.add_css_class(css)
+        row.add_prefix(icon)
+
+        # Point at the flag that would mitigate this, when the catalogue has one
+        # and it is not already in effect.
+        flag_ids = [
+            flag_id
+            for flag_id, bug in probe.MITIGATION_FLAGS.items()
+            if bug == name and flag_id in self.window.catalogue.flags
+        ]
+        actionable = [
+            flag_id
+            for flag_id in flag_ids
+            if self.window.states.get(flag_id) is not None
+            and self.window.states[flag_id].state is not State.APPLIED
+        ]
+        if verdict == "vulnerable" and actionable:
+            button = Gtk.Button(label="Show the flag", valign=Gtk.Align.CENTER)
+            button.connect("clicked", self._on_show_mitigation, actionable[0])
+            row.add_suffix(button)
+        return row
+
+    def _on_show_mitigation(self, _button: Gtk.Button, flag_id: str) -> None:
+        flag = self.window.catalogue.get(flag_id)
+        if flag is None:
+            return
+        self.window.search_text = flag.key.lower()
+        self.window._show_section(flag.section)
 
     # -- summary -------------------------------------------------------- #
 

@@ -19,6 +19,13 @@ from pathlib import Path
 FSTAB = "/etc/fstab"
 MOUNT = "/usr/bin/mount"
 
+#: What is mounted right now, with the options the kernel is actually enforcing.
+#: fstab is a request made at boot; this is the answer. They drift — someone
+#: remounts by hand, a unit mounts something fstab never mentions, or an entry
+#: was edited and never remounted — and until you can see both, a hardened line
+#: in fstab looks like a hardened filesystem when it may be neither.
+PROC_MOUNTS = "/proc/mounts"
+
 #: The options this section offers. Anything else in an existing line is left
 #: exactly as it is — we add and remove only from this set.
 HARDENING_OPTIONS = ("nodev", "nosuid", "noexec", "ro")
@@ -134,6 +141,121 @@ def read() -> list[Entry]:
         return parse(Path(FSTAB).read_text(encoding="utf-8", errors="replace"))
     except OSError:
         return []
+
+
+# --------------------------------------------------------------------------- #
+#  Live state
+# --------------------------------------------------------------------------- #
+
+
+@dataclass
+class LiveMount:
+    """One line of /proc/mounts — a filesystem as the kernel has it now."""
+
+    device: str
+    mount: str
+    fstype: str
+    options: str
+
+    @property
+    def option_list(self) -> list[str]:
+        return [o for o in self.options.split(",") if o]
+
+    def has(self, option: str) -> bool:
+        return option in self.option_list
+
+    @property
+    def hardening(self) -> set[str]:
+        """Just the options this section manages."""
+        return set(self.option_list) & set(HARDENING_OPTIONS)
+
+
+def _unescape(field: str) -> str:
+    """Undo the octal escaping /proc/mounts uses for space, tab, newline and \\."""
+    out: list[str] = []
+    index = 0
+    while index < len(field):
+        char = field[index]
+        if char == "\\" and index + 3 < len(field) and field[index + 1:index + 4].isdigit():
+            try:
+                out.append(chr(int(field[index + 1:index + 4], 8)))
+                index += 4
+                continue
+            except ValueError:
+                pass
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
+def parse_mounts(text: str) -> dict[str, LiveMount]:
+    """Parse /proc/mounts, keyed by mount point.
+
+    A mount point can appear more than once when something is mounted over the
+    top of it. The last line wins, because that is the filesystem you reach when
+    you open a path there.
+    """
+    live: dict[str, LiveMount] = {}
+    for raw in text.splitlines():
+        parts = raw.split()
+        if len(parts) < 4:
+            continue
+        mount = _unescape(parts[1])
+        live[mount] = LiveMount(
+            device=_unescape(parts[0]),
+            mount=mount,
+            fstype=parts[2],
+            options=parts[3],
+        )
+    return live
+
+
+def read_live() -> dict[str, LiveMount]:
+    """What is mounted right now. Unprivileged — /proc/mounts is world-readable."""
+    try:
+        return parse_mounts(Path(PROC_MOUNTS).read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return {}
+
+
+def drift(entries: list[Entry], live: dict[str, LiveMount]) -> dict[str, tuple[set[str], set[str]]]:
+    """``{mount: (in fstab, live)}`` for entries where the two disagree.
+
+    Only the options this section manages are compared: fstab saying ``defaults``
+    while the kernel reports ``rw,relatime`` is not drift, it is the same thing
+    spelled differently.
+    """
+    out: dict[str, tuple[set[str], set[str]]] = {}
+    for entry in entries:
+        if not entry.touchable:
+            continue
+        mounted = live.get(entry.mount)
+        if mounted is None:
+            continue  # not mounted at all; reported separately
+        wanted = set(entry.option_list) & set(HARDENING_OPTIONS)
+        if wanted != mounted.hardening:
+            out[entry.mount] = (wanted, mounted.hardening)
+    return out
+
+
+def unmounted(entries: list[Entry], live: dict[str, LiveMount]) -> list[str]:
+    """fstab entries that are not mounted right now."""
+    return [e.mount for e in entries if e.touchable and e.mount not in live]
+
+
+def unlisted(entries: list[Entry], live: dict[str, LiveMount]) -> list[LiveMount]:
+    """Mounted filesystems with no fstab entry, where hardening is recommended.
+
+    /dev/shm and /run are the ones that matter: systemd mounts them and most
+    machines have no fstab line for either, so a page built only from fstab
+    silently omits two of the filesystems §4.10 most wants hardened.
+    """
+    known = {e.mount for e in entries}
+    return [
+        mount
+        for name, mount in sorted(live.items())
+        if name not in known and name in RECOMMENDED and name not in NEVER_TOUCH
+    ]
 
 
 def validate_options(options: set[str]) -> None:

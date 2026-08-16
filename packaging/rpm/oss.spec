@@ -8,7 +8,7 @@
 #  tarball the Source0 below expects.
 
 Name:           oss
-Version:        0.1.1
+Version:        1.0.0
 Release:        1%{?dist}
 Summary:        Pick hardening flags, review the diff, apply once
 

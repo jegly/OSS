@@ -380,6 +380,12 @@ def has_capability(token: str) -> bool:
         # rule set at load time if the path does not exist — this is how an
         # optional-package's config file stays out of the way until installed.
         return os.path.exists(token[len("path:"):])
+    if token.startswith("arch:"):
+        # Several kernel parameters exist on one architecture only. The kernel
+        # does not reject an unknown one, it hands it to userspace and carries
+        # on — so an arm64 parameter set on x86 looks applied, sits in the
+        # command line, and does nothing at all.
+        return os.uname().machine == token[len("arch:"):]
     return True
 
 
@@ -392,6 +398,13 @@ def capability_reason(token: str) -> str:
         )
     if token.startswith("path:"):
         return f"{token[len('path:'):]} does not exist on this system yet."
+    if token.startswith("arch:"):
+        return (
+            f"This kernel parameter only exists on {token[len('arch:'):]}, and "
+            f"this machine is {os.uname().machine}. Setting it here would put a "
+            f"token on the command line that the kernel hands straight to "
+            f"userspace and ignores."
+        )
     return f"Requires {token}, which is not available on this system."
 
 
@@ -692,6 +705,76 @@ def satisfies(section: Section, flag: Flag, live: str | None, reference: str) ->
     return live in flag.satisfied_by
 
 
+#: Kernel parameters that switch a mitigation *off*, and the sysfs bug each one
+#: silences. They are checked before anything else in the kernel's own cmdline
+#: parsing, so one of these outranks every positive parameter on the line —
+#: `spec_store_bypass_disable=on nospec_store_bypass_disable` leaves the machine
+#: vulnerable, and the only place that shows is sysfs.
+NEGATING_PARAMS: dict[str, tuple[str, ...]] = {
+    "nospec_store_bypass_disable": ("spec_store_bypass",),
+    "nopti": ("meltdown",),
+    "nospectre_v1": ("spectre_v1",),
+    "nospectre_v2": ("spectre_v2",),
+    "nospectre_bhi": ("spectre_v2",),
+    "no_stf_barrier": ("spectre_v2",),
+    "nol1dflush": ("l1tf",),
+    "mds": ("mds",),  # only when set to "off"
+    "tsx_async_abort": ("tsx_async_abort",),  # only when set to "off"
+    "mitigations": (),  # "off" disables everything; handled below
+}
+
+
+def _negating_tokens(cmdline: list[str], bug: str) -> list[str]:
+    """Cmdline tokens that would switch off the mitigation for *bug*."""
+    found = []
+    for token in cmdline:
+        name, sep, value = token.partition("=")
+        if name == "mitigations" and value == "off":
+            found.append(token)
+            continue
+        bugs = NEGATING_PARAMS.get(name)
+        if bugs is None or bug not in bugs:
+            continue
+        # `mds=off` negates; `mds=full` does not. A bare `nopti` negates.
+        if name in ("mds", "tsx_async_abort") and value != "off":
+            continue
+        found.append(token)
+    return found
+
+
+def _mitigation_contradiction(flag: Flag, facts: SystemFacts) -> str:
+    """Why this mitigation is not actually in effect, or "" when it is.
+
+    The parameter being on the command line says what was *asked for*. This
+    reads what the kernel decided, which is the thing that matters and the thing
+    the app was previously not looking at — it reported spec_store_bypass_disable
+    as applied on a machine sysfs called Vulnerable.
+    """
+    bug = MITIGATION_FLAGS.get(flag.id)
+    if bug is None:
+        return ""
+    status = facts.vulnerabilities.get(bug, "")
+    if classify_vulnerability(status) != "vulnerable":
+        return ""
+
+    note = (
+        f"The parameter is on the kernel command line, but the kernel still "
+        f"reports {bug} as “{status}”. Setting it did not take effect."
+    )
+    negations = _negating_tokens(facts.cmdline, bug)
+    if negations:
+        note += (
+            f"  {', '.join(negations)} is also on the command line and is parsed "
+            f"first, which overrides it. Remove that to let this work."
+        )
+    elif "No microcode" in status:
+        note += (
+            "  The CPU is missing the microcode this needs, so no kernel setting "
+            "can close it — a firmware or intel-microcode update is the only fix."
+        )
+    return note
+
+
 def flag_state(
     section: Section,
     flag: Flag,
@@ -730,6 +813,18 @@ def flag_state(
 
     reference = on_disk if on_disk is not None else (selected or flag.value)
     if satisfies(section, flag, live, reference):
+        # For a CPU mitigation, the cmdline token being present is not evidence
+        # that the mitigation is on. The kernel has the last word and publishes
+        # it in sysfs, so ask that before claiming success.
+        contradiction = _mitigation_contradiction(flag, facts)
+        if contradiction:
+            return FlagState(
+                flag.id,
+                State.DIFFERS,
+                live=live,
+                on_disk=on_disk,
+                note=contradiction,
+            )
         return FlagState(flag.id, State.APPLIED, live=live, on_disk=on_disk)
 
     if on_disk is None:
@@ -832,10 +927,60 @@ def ipv6_redundant(selection: dict[str, str]) -> bool:
     return selection.get("disable_ipv6_all") == "1" or "ipv6_disable_boot" in selection
 
 
+#: flag id -> sysfs vulnerability file name. Read in both directions: to grey
+#: out a mitigation this CPU does not need, and to point a vulnerable bug at the
+#: flag that would mitigate it.
+MITIGATION_FLAGS: dict[str, str] = {}
+
+
+def classify_vulnerability(status: str) -> str:
+    """``not-affected`` | ``mitigated`` | ``vulnerable`` | ``unknown``.
+
+    The kernel's own wording, which is not quite a fixed vocabulary: KVM-only
+    entries prefix the verdict ("KVM: Mitigation: VMX disabled"), and a partial
+    mitigation still says "Vulnerable" with the reason after a colon
+    ("Vulnerable: No microcode") — which is the case that matters most, because
+    it is the one a user cannot fix from this app.
+    """
+    text = status.strip()
+    if not text:
+        return "unknown"
+    if text.startswith("Not affected"):
+        return "not-affected"
+    if text.startswith("Vulnerable") or "vulnerable" in text.lower().split(":")[0]:
+        return "vulnerable"
+    if "Mitigation" in text:
+        return "mitigated"
+    return "unknown"
+
+
+def vulnerability_report(facts: SystemFacts) -> list[tuple[str, str, str]]:
+    """``(name, verdict, raw status)`` for every CPU bug this kernel reports.
+
+    Sorted worst first: what you can still do something about comes before what
+    is already handled.
+    """
+    order = {"vulnerable": 0, "unknown": 1, "mitigated": 2, "not-affected": 3}
+    out = [
+        (name, classify_vulnerability(status), status)
+        for name, status in facts.vulnerabilities.items()
+    ]
+    out.sort(key=lambda row: (order.get(row[1], 9), row[0]))
+    return out
+
+
 def unaffected_mitigations(catalogue: Catalogue, facts: SystemFacts) -> set[str]:
     """Flag ids whose CPU bug reports 'Not affected' — greyed out in the UI (§4.4)."""
-    #: flag id -> sysfs vulnerability file name
-    mapping = {
+    out: set[str] = set()
+    for flag_id, bug in MITIGATION_FLAGS.items():
+        status = facts.vulnerabilities.get(bug, "")
+        if status.startswith("Not affected") and flag_id in catalogue.flags:
+            out.add(flag_id)
+    return out
+
+
+def _build_mitigation_flags() -> dict[str, str]:
+    return {
         "pti_on": "meltdown",
         "spectre_v2": "spectre_v2",
         "spectre_v2_user": "spectre_v2",
@@ -851,10 +996,13 @@ def unaffected_mitigations(catalogue: Catalogue, facts: SystemFacts) -> set[str]
         "spec_rstack_overflow": "spec_rstack_overflow",
         "srbds": "srbds",
         "kvm_nx_huge_pages": "itlb_multihit",
+        # Bugs that post-date the original list. Each has its own sysfs entry,
+        # so an unaffected CPU greys these out the same way as the rest.
+        "indirect_target_selection": "indirect_target_selection",
+        "tsa_mitigation": "tsa",
+        "vmscape_mitigation": "vmscape",
+        "l1d_flush_on": "l1tf",
     }
-    out: set[str] = set()
-    for flag_id, bug in mapping.items():
-        status = facts.vulnerabilities.get(bug, "")
-        if status.startswith("Not affected") and flag_id in catalogue.flags:
-            out.add(flag_id)
-    return out
+
+
+MITIGATION_FLAGS.update(_build_mitigation_flags())

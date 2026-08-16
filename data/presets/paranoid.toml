@@ -12,6 +12,10 @@ id = "accept_local"
 value = "0"
 
 [[set]]
+id = "accept_local_default"
+value = "0"
+
+[[set]]
 id = "accept_redirects_all"
 value = "0"
 
@@ -108,11 +112,23 @@ id = "arp_accept"
 value = "0"
 
 [[set]]
+id = "arp_accept_default"
+value = "0"
+
+[[set]]
 id = "arp_announce"
 value = "2"
 
 [[set]]
+id = "arp_announce_default"
+value = "2"
+
+[[set]]
 id = "arp_ignore"
+value = "1"
+
+[[set]]
+id = "arp_ignore_default"
 value = "1"
 
 [[set]]
@@ -132,6 +148,10 @@ id = "audit_buffer"
 value = "1"
 
 [[set]]
+id = "audit_clock_adjtime"
+value = "1"
+
+[[set]]
 id = "audit_cron"
 value = "1"
 
@@ -144,7 +164,23 @@ id = "audit_failure_mode"
 value = "1"
 
 [[set]]
+id = "audit_hosts_file"
+value = "1"
+
+[[set]]
 id = "audit_identity"
+value = "1"
+
+[[set]]
+id = "audit_identity_group"
+value = "1"
+
+[[set]]
+id = "audit_identity_gshadow"
+value = "1"
+
+[[set]]
+id = "audit_identity_shadow"
 value = "1"
 
 [[set]]
@@ -176,6 +212,10 @@ id = "audit_modprobe_config"
 value = "1"
 
 [[set]]
+id = "audit_module_binaries"
+value = "1"
+
+[[set]]
 id = "audit_modules"
 value = "1"
 
@@ -192,11 +232,15 @@ id = "audit_network_env"
 value = "1"
 
 [[set]]
-id = "audit_own_config"
+id = "audit_pam_config"
 value = "1"
 
 [[set]]
-id = "audit_pam_config"
+id = "audit_passwd_binary"
+value = "1"
+
+[[set]]
+id = "audit_perm_chown"
 value = "1"
 
 [[set]]
@@ -216,6 +260,14 @@ id = "audit_ptrace"
 value = "1"
 
 [[set]]
+id = "audit_session_btmp"
+value = "1"
+
+[[set]]
+id = "audit_session_wtmp"
+value = "1"
+
+[[set]]
 id = "audit_sudoers"
 value = "1"
 
@@ -228,7 +280,19 @@ id = "audit_time_changes"
 value = "1"
 
 [[set]]
+id = "audit_time_localtime"
+value = "1"
+
+[[set]]
 id = "bc_forwarding"
+value = "0"
+
+[[set]]
+id = "bc_forwarding_default"
+value = "0"
+
+[[set]]
+id = "bdev_allow_write_mounted"
 value = "0"
 
 [[set]]
@@ -237,6 +301,10 @@ value = "0"
 
 [[set]]
 id = "bootp_relay"
+value = "0"
+
+[[set]]
+id = "bootp_relay_default"
 value = "0"
 
 [[set]]
@@ -257,6 +325,10 @@ value = "0"
 
 [[set]]
 id = "conf_all_forwarding"
+value = "0"
+
+[[set]]
+id = "conf_all_forwarding_default"
 value = "0"
 
 [[set]]
@@ -332,7 +404,15 @@ id = "drop_gratuitous_arp"
 value = "1"
 
 [[set]]
+id = "drop_gratuitous_arp_default"
+value = "1"
+
+[[set]]
 id = "drop_unicast_in_l2_multicast"
+value = "1"
+
+[[set]]
+id = "drop_unicast_in_l2_multicast_default"
 value = "1"
 
 [[set]]
@@ -512,6 +592,14 @@ id = "idle_delay"
 value = "300"
 
 [[set]]
+id = "indirect_target_selection"
+value = "on"
+
+[[set]]
+id = "init_mlocked_on_free"
+value = "1"
+
+[[set]]
 id = "init_on_alloc"
 value = "1"
 
@@ -584,7 +672,15 @@ id = "ipv6_accept_ra_defrtr"
 value = "0"
 
 [[set]]
+id = "ipv6_accept_ra_defrtr_default"
+value = "0"
+
+[[set]]
 id = "ipv6_accept_ra_from_local"
+value = "0"
+
+[[set]]
+id = "ipv6_accept_ra_from_local_default"
 value = "0"
 
 [[set]]
@@ -592,11 +688,23 @@ id = "ipv6_accept_ra_min_hop_limit"
 value = "64"
 
 [[set]]
+id = "ipv6_accept_ra_min_hop_limit_default"
+value = "64"
+
+[[set]]
 id = "ipv6_accept_ra_pinfo"
 value = "0"
 
 [[set]]
+id = "ipv6_accept_ra_pinfo_default"
+value = "0"
+
+[[set]]
 id = "ipv6_accept_ra_rtr_pref"
+value = "0"
+
+[[set]]
+id = "ipv6_accept_ra_rtr_pref_default"
 value = "0"
 
 [[set]]
@@ -620,7 +728,15 @@ id = "ipv6_accept_untracked_na"
 value = "0"
 
 [[set]]
+id = "ipv6_accept_untracked_na_default"
+value = "0"
+
+[[set]]
 id = "ipv6_autoconf"
+value = "0"
+
+[[set]]
+id = "ipv6_autoconf_default"
 value = "0"
 
 [[set]]
@@ -632,7 +748,15 @@ id = "ipv6_drop_unicast_in_l2_multicast"
 value = "1"
 
 [[set]]
+id = "ipv6_drop_unicast_in_l2_multicast_default"
+value = "1"
+
+[[set]]
 id = "ipv6_drop_unsolicited_na"
+value = "1"
+
+[[set]]
+id = "ipv6_drop_unsolicited_na_default"
 value = "1"
 
 [[set]]
@@ -640,15 +764,23 @@ id = "ipv6_forwarding"
 value = "0"
 
 [[set]]
+id = "ipv6_forwarding_default"
+value = "0"
+
+[[set]]
 id = "ipv6_max_addresses"
 value = "1"
 
 [[set]]
-id = "ipv6_mc_forwarding"
-value = "0"
+id = "ipv6_max_addresses_default"
+value = "1"
 
 [[set]]
 id = "ipv6_router_solicitations"
+value = "0"
+
+[[set]]
+id = "ipv6_router_solicitations_default"
 value = "0"
 
 [[set]]
@@ -656,7 +788,15 @@ id = "ipv6_temp_prefered_lft"
 value = "3600"
 
 [[set]]
+id = "ipv6_temp_prefered_lft_default"
+value = "3600"
+
+[[set]]
 id = "ipv6_temp_valid_lft"
+value = "7200"
+
+[[set]]
+id = "ipv6_temp_valid_lft_default"
 value = "7200"
 
 [[set]]
@@ -748,6 +888,10 @@ id = "kvm_nx_huge_pages"
 value = "force"
 
 [[set]]
+id = "l1d_flush_on"
+value = "on"
+
+[[set]]
 id = "l1tf"
 value = "full,force"
 
@@ -762,6 +906,10 @@ value = "0"
 [[set]]
 id = "libata_noncq"
 value = "noncq"
+
+[[set]]
+id = "location_disabled"
+value = "false"
 
 [[set]]
 id = "lock_delay"
@@ -780,6 +928,10 @@ id = "lockdown"
 value = "integrity"
 
 [[set]]
+id = "lockdown_application_handlers"
+value = "true"
+
+[[set]]
 id = "lockdown_command_line"
 value = "true"
 
@@ -789,6 +941,10 @@ value = "true"
 
 [[set]]
 id = "log_martians"
+value = "1"
+
+[[set]]
+id = "log_martians_default"
 value = "1"
 
 [[set]]
@@ -892,12 +1048,20 @@ id = "max_uts_namespaces"
 value = "0"
 
 [[set]]
-id = "mc_forwarding_v4"
-value = "0"
-
-[[set]]
 id = "mds"
 value = "full,nosmt"
+
+[[set]]
+id = "media_automount"
+value = "false"
+
+[[set]]
+id = "media_automount_open"
+value = "false"
+
+[[set]]
+id = "media_autorun_never"
+value = "true"
 
 [[set]]
 id = "memfd_noexec"
@@ -1672,6 +1836,10 @@ id = "nosmt_force"
 value = "force"
 
 [[set]]
+id = "notifications_show_banners"
+value = "false"
+
+[[set]]
 id = "oops_limit"
 value = "100"
 
@@ -1728,6 +1896,34 @@ id = "printk_quiet"
 value = "3 3 3 3"
 
 [[set]]
+id = "privacy_hide_identity"
+value = "true"
+
+[[set]]
+id = "privacy_old_files_age"
+value = "7"
+
+[[set]]
+id = "privacy_old_temp"
+value = "true"
+
+[[set]]
+id = "privacy_old_trash"
+value = "true"
+
+[[set]]
+id = "privacy_recent_files"
+value = "false"
+
+[[set]]
+id = "privacy_technical_reports"
+value = "false"
+
+[[set]]
+id = "privacy_usage_stats"
+value = "false"
+
+[[set]]
 id = "promote_secondaries_all"
 value = "1"
 
@@ -1753,6 +1949,10 @@ value = "1"
 
 [[set]]
 id = "proxy_arp"
+value = "0"
+
+[[set]]
+id = "proxy_arp_default"
 value = "0"
 
 [[set]]
@@ -1896,12 +2096,20 @@ id = "route_localnet"
 value = "0"
 
 [[set]]
+id = "route_localnet_default"
+value = "0"
+
+[[set]]
 id = "rp_filter_all"
 value = "1"
 
 [[set]]
 id = "rp_filter_default"
 value = "1"
+
+[[set]]
+id = "search_providers_external"
+value = "true"
 
 [[set]]
 id = "secure_redirects_all"
@@ -1922,6 +2130,14 @@ value = "0"
 [[set]]
 id = "shared_media"
 value = "0"
+
+[[set]]
+id = "shared_media_default"
+value = "0"
+
+[[set]]
+id = "shell_remember_mount_password"
+value = "false"
 
 [[set]]
 id = "show_in_lock_screen"
@@ -1968,10 +2184,6 @@ id = "srbds"
 value = "on"
 
 [[set]]
-id = "ssbd_force"
-value = "force-on"
-
-[[set]]
 id = "ssh_allow_agent_forwarding"
 value = "no"
 
@@ -1990,6 +2202,10 @@ value = "publickey"
 [[set]]
 id = "ssh_banner"
 value = "/etc/issue.net"
+
+[[set]]
+id = "ssh_ca_signature_algorithms"
+value = "ssh-ed25519,ecdsa-sha2-nistp256,rsa-sha2-512,rsa-sha2-256"
 
 [[set]]
 id = "ssh_challenge_response"
@@ -2020,7 +2236,15 @@ id = "ssh_expose_auth_info"
 value = "no"
 
 [[set]]
+id = "ssh_fingerprint_hash"
+value = "sha256"
+
+[[set]]
 id = "ssh_gateway_ports"
+value = "no"
+
+[[set]]
+id = "ssh_gssapi_off"
 value = "no"
 
 [[set]]
@@ -2036,7 +2260,15 @@ id = "ssh_ignore_rhosts"
 value = "yes"
 
 [[set]]
+id = "ssh_ignore_user_known_hosts"
+value = "yes"
+
+[[set]]
 id = "ssh_kbd_interactive"
+value = "no"
+
+[[set]]
+id = "ssh_kerberos_off"
 value = "no"
 
 [[set]]
@@ -2072,8 +2304,24 @@ id = "ssh_password_authentication"
 value = "no"
 
 [[set]]
+id = "ssh_per_source_max_startups"
+value = "4"
+
+[[set]]
+id = "ssh_per_source_penalties"
+value = "yes"
+
+[[set]]
 id = "ssh_permit_empty_passwords"
 value = "no"
+
+[[set]]
+id = "ssh_permit_listen_none"
+value = "none"
+
+[[set]]
+id = "ssh_permit_open_none"
+value = "none"
 
 [[set]]
 id = "ssh_permit_root_login"
@@ -2088,6 +2336,10 @@ id = "ssh_permit_user_environment"
 value = "no"
 
 [[set]]
+id = "ssh_print_last_log"
+value = "yes"
+
+[[set]]
 id = "ssh_pubkey_accepted_algorithms"
 value = "ssh-ed25519,sk-ssh-ed25519@openssh.com"
 
@@ -2096,8 +2348,20 @@ id = "ssh_pubkey_authentication"
 value = "yes"
 
 [[set]]
+id = "ssh_pubkey_verify_required"
+value = "verify-required"
+
+[[set]]
+id = "ssh_rekey_limit"
+value = "512M 1h"
+
+[[set]]
 id = "ssh_required_rsa_size"
 value = "3072"
+
+[[set]]
+id = "ssh_stream_local_bind_unlink"
+value = "yes"
 
 [[set]]
 id = "ssh_strict_modes"
@@ -2106,6 +2370,10 @@ value = "yes"
 [[set]]
 id = "ssh_tcp_keepalive"
 value = "no"
+
+[[set]]
+id = "ssh_unused_connection_timeout"
+value = "300"
 
 [[set]]
 id = "ssh_use_dns"
@@ -2372,6 +2640,10 @@ id = "threads_max"
 value = "16384"
 
 [[set]]
+id = "tsa_mitigation"
+value = "on"
+
+[[set]]
 id = "tsx_async_abort"
 value = "full,nosmt"
 
@@ -2416,8 +2688,16 @@ id = "unprivileged_userns_clone"
 value = "0"
 
 [[set]]
+id = "usb_authorized_default"
+value = "0"
+
+[[set]]
 id = "verity_require_signatures"
 value = "1"
+
+[[set]]
+id = "vmscape_mitigation"
+value = "on"
 
 [[set]]
 id = "vsyscall_none"
