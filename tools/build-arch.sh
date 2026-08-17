@@ -13,19 +13,24 @@ ROOT=$(pwd)
 
 VERSION=$(head -1 debian/changelog | sed 's/.*(\(.*\)).*/\1/')
 BUILD="$ROOT/build/arch"
+# The archive is named after the package; the directory inside it is named after
+# the repository, because that is what GitHub's tag tarball contains and what the
+# PKGBUILD cds into. Building it any other way locally means the PKGBUILD that
+# works here is not the PKGBUILD the AUR runs.
 STEM="oss-$VERSION"
+TOPDIR="OSS-$VERSION"
 
 rm -rf "$BUILD"
 mkdir -p "$BUILD"
 
 # git archive would miss uncommitted work, which is exactly what you are
 # usually trying to test here, so copy the tree instead.
-mkdir -p "$BUILD/$STEM"
+mkdir -p "$BUILD/$TOPDIR"
 tar --exclude=.git --exclude=build --exclude='__pycache__' --exclude='*.pyc' \
-    -cf - . | tar -xf - -C "$BUILD/$STEM"
+    -cf - . | tar -xf - -C "$BUILD/$TOPDIR"
 
-tar -czf "$BUILD/$STEM.tar.gz" -C "$BUILD" "$STEM"
-rm -rf "$BUILD/$STEM"
+tar -czf "$BUILD/$STEM.tar.gz" -C "$BUILD" "$TOPDIR"
+rm -rf "$BUILD/$TOPDIR"
 
 cp packaging/arch/PKGBUILD "$BUILD/"
 

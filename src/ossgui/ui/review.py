@@ -344,6 +344,7 @@ class ReviewDialog(Adw.Window):
             probe.kdump_conflict(self.window.facts, selection),
             probe.slab_debug_redundancy(selection),
             probe.dot_without_firewall_port(selection),
+            probe.core_pattern_clobbered_by_apport(self.window.facts, selection),
         ):
             if check:
                 messages.append(check)

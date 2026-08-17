@@ -125,10 +125,21 @@ class Module:
                 return key
         return parts[0] if parts else ""
 
-    def verdict(self, mounted_fstypes: frozenset[str]) -> tuple[str, str]:
-        """``(level, why)`` — level is refused | keep | caution | candidate.
+    def verdict(
+        self, mounted_fstypes: frozenset[str], blacklisted_by: str | None = None
+    ) -> tuple[str, str]:
+        """``(level, why)`` — refused | blocked | caution | candidate.
 
-        Order matters: the running system's own needs outrank any table.
+        Order matters: the running system's own needs outrank any table, and they
+        outrank the blacklist too. A module that is loaded *is* in the kernel
+        whatever modprobe.d says about it — the blacklist only decides what
+        happens at the next boot.
+
+        *blacklisted_by* is the file that already stops this module loading, from
+        ``probe.read_blacklists()``. Without it this browser offered modules it had
+        no way of knowing were already blocked: 107 of them on a stock install,
+        including everything the curated section had applied and everything the
+        distro blacklists itself.
         """
         if self.loaded and self.used_by:
             return (
@@ -137,6 +148,13 @@ class Module:
                 f"would break them at the next boot.",
             )
         if self.loaded:
+            if blacklisted_by:
+                return (
+                    "refused",
+                    f"Already blacklisted in {blacklisted_by}, but loaded on this "
+                    f"boot, so it is still in the kernel. A reboot is what applies "
+                    f"it — there is nothing to stage here.",
+                )
             return (
                 "refused",
                 "Loaded right now. Something asked for it on this boot, so it is "
@@ -146,6 +164,13 @@ class Module:
             return (
                 "refused",
                 f"{self.name} is a filesystem currently mounted on this machine.",
+            )
+        if blacklisted_by:
+            return (
+                "blocked",
+                f"Already blacklisted in {blacklisted_by}, and not loaded. This one "
+                f"is done — staging it again would write a second line saying the "
+                f"same thing.",
             )
 
         subsystem = self.subsystem
@@ -177,15 +202,22 @@ class Inventory:
     modules: dict[str, Module] = field(default_factory=dict)
     mounted_fstypes: frozenset[str] = frozenset()
     builtin: frozenset[str] = frozenset()
+    #: Module -> the modprobe.d file that already blacklists it. Empty means the
+    #: caller did not ask for it; read_inventory() always fills it in.
+    blacklisted: dict[str, str] = field(default_factory=dict)
 
     @property
     def loaded_count(self) -> int:
         return sum(1 for m in self.modules.values() if m.loaded)
 
+    def verdict_for(self, module: Module) -> tuple[str, str]:
+        """This module's verdict, with the blacklist this inventory knows about."""
+        return module.verdict(self.mounted_fstypes, self.blacklisted.get(module.name))
+
     def counts(self) -> dict[str, int]:
-        out = {"refused": 0, "caution": 0, "candidate": 0}
+        out = {"refused": 0, "blocked": 0, "caution": 0, "candidate": 0}
         for module in self.modules.values():
-            level, _why = module.verdict(self.mounted_fstypes)
+            level, _why = self.verdict_for(module)
             out[level] = out.get(level, 0) + 1
         return out
 
@@ -247,11 +279,17 @@ def read_inventory(release: str | None = None) -> Inventory:
     and would take most of a minute across the whole tree — descriptions are
     fetched by describe() for the rows actually on screen.
     """
+    # Imported here rather than at module scope, matching how branding is pulled
+    # in below: this module is shared with the privileged helper, and the import
+    # graph stays a tree.
+    from . import probe
+
     release = release or os.uname().release
     inventory = Inventory(
         release=release,
         mounted_fstypes=read_mounted_fstypes(),
         builtin=read_builtin(release),
+        blacklisted=probe.read_blacklists(),
     )
     loaded = read_lsmod()
     root = Path(MODULE_ROOT) / release / "kernel"
@@ -281,6 +319,116 @@ def read_inventory(release: str | None = None) -> Inventory:
                 used_by=loaded.get(name, ()),
             )
     return inventory
+
+
+# --------------------------------------------------------------------------- #
+#  The row model behind the modprobe page
+# --------------------------------------------------------------------------- #
+
+#: A subsystem with at least this many modules gets its own group; anything
+#: smaller folds into its parent. Two-level paths alone gave 244 groups, which is
+#: not a list anyone scrolls; one-level gave 12, with 4,500 modules under
+#: "drivers". This lands on about 50.
+GROUP_THRESHOLD = 40
+
+
+@dataclass
+class Row:
+    """One module on the page: at most one row per module name.
+
+    *flag* is the curated catalogue entry when there is one. That is what decides
+    where a toggle writes — a curated module goes to the section's own drop-in and
+    can travel in a preset, everything else goes to the debloat drop-in. Before
+    this existed the two lists were rendered separately and 170 modules appeared
+    twice on the same page, with two controls writing to two different files.
+    """
+
+    name: str
+    module: Module | None = None
+    flag: object | None = None
+
+    @property
+    def curated(self) -> bool:
+        return self.flag is not None
+
+    @property
+    def size_kb(self) -> int:
+        return self.module.size_kb if self.module is not None else 0
+
+    @property
+    def category(self) -> str:
+        if self.module is not None:
+            return self.module.category
+        return getattr(self.flag, "group", "") or ""
+
+
+def _cut(category: str, depth: int) -> str:
+    parts = [p for p in category.split("/") if p]
+    return "/".join(parts[:depth]) or "kernel"
+
+
+def group_key(category: str, big: set[str]) -> str:
+    """Which group a kernel-tree category belongs to."""
+    two = _cut(category, 2)
+    return two if two in big else _cut(category, 1) + "/*"
+
+
+def big_groups(categories: list[str], threshold: int = GROUP_THRESHOLD) -> set[str]:
+    """Two-level subsystems large enough to stand on their own."""
+    counts: dict[str, int] = {}
+    for category in categories:
+        key = _cut(category, 2)
+        counts[key] = counts.get(key, 0) + 1
+    return {key for key, count in counts.items() if count >= threshold}
+
+
+def build_rows(inventory: Inventory, flags: list) -> list[Row]:
+    """One row per module: curated entries in catalogue order, then the rest.
+
+    A curated flag whose module is not on this kernel still gets a row. Writing a
+    blacklist line for a name the kernel does not have is inert, but the flag is
+    carried by presets and does apply on a machine that has it, so hiding it here
+    would silently drop it from the section.
+    """
+    rows: list[Row] = []
+    claimed: set[str] = set()
+    for flag in flags:
+        key = getattr(flag, "key", "")
+        if not key or key in claimed:
+            continue
+        claimed.add(key)
+        rows.append(Row(name=key, module=inventory.modules.get(key), flag=flag))
+    for name, module in inventory.modules.items():
+        if name not in claimed:
+            rows.append(Row(name=name, module=module))
+    return rows
+
+
+def grouped(rows: list[Row]) -> list[tuple[str, list[Row]]]:
+    """``[(group, rows)]`` — curated groups first, then subsystems by size.
+
+    Curated groups keep their catalogue names and their catalogue order: they are
+    the families someone came to this page looking for, and they stay at the top
+    where the section used to be.
+    """
+    curated: dict[str, list[Row]] = {}
+    others: list[Row] = []
+    for row in rows:
+        if row.curated:
+            curated.setdefault(getattr(row.flag, "group", "") or "modules", []).append(row)
+        else:
+            others.append(row)
+
+    big = big_groups([row.category for row in others])
+    buckets: dict[str, list[Row]] = {}
+    for row in others:
+        buckets.setdefault(group_key(row.category, big), []).append(row)
+    for bucket in buckets.values():
+        bucket.sort(key=lambda r: (-r.size_kb, r.name))
+
+    ordered = list(curated.items())
+    ordered += sorted(buckets.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+    return ordered
 
 
 def describe(module: Module, timeout: int = 5) -> str:

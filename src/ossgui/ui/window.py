@@ -473,12 +473,6 @@ class MainWindow(Adw.ApplicationWindow):
                 self.grid_box.append(PackagesPage(self))
                 self._refresh_chrome()
                 return
-            if section_id == "debloat":
-                from .kmod_page import KmodPage
-
-                self.grid_box.append(KmodPage(self))
-                self._refresh_chrome()
-                return
             if section_id == "snap":
                 from .snap_page import SnapPage
 
@@ -501,6 +495,17 @@ class MainWindow(Adw.ApplicationWindow):
                 from .integrity_page import IntegrityPage
 
                 self.grid_box.append(IntegrityPage(self))
+                self._refresh_chrome()
+                return
+            if section_id == "modprobe":
+                from .kmod_page import KmodPage
+
+                # This page renders the curated flags itself, one row per module
+                # alongside every other module on the kernel, so it returns rather
+                # than falling through to the card grid. Rendering both put 170
+                # modules on screen twice, with a switch and a checkbox writing to
+                # two different files.
+                self.grid_box.append(KmodPage(self))
                 self._refresh_chrome()
                 return
             if section_id == "services":

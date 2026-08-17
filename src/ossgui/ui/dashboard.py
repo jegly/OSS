@@ -293,6 +293,9 @@ class Dashboard(Gtk.Box):
         dot = probe.dot_without_firewall_port(selection)
         if dot:
             out.append(("high", "DNS over TLS would break", dot))
+        clobbered = probe.core_pattern_clobbered_by_apport(self.window.facts, selection)
+        if clobbered:
+            out.append(("high", "apport will overwrite core_pattern", clobbered))
 
         managed = [
             f.key for f in self.window.catalogue.flags.values() if f.section == "sysctl"

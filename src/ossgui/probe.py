@@ -15,7 +15,7 @@ import os
 import re
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from enum import Enum
 from pathlib import Path
@@ -183,6 +183,8 @@ class SystemFacts:
     gsettings: dict[str, str]
     #: CPU vulnerability status from sysfs, keyed by bug name.
     vulnerabilities: dict[str, str]
+    #: Module -> the modprobe.d file that stops it loading. See read_blacklists().
+    blacklisted: dict[str, str] = field(default_factory=dict)
     #: True when we are running over SSH — gates the lockout warnings.
     over_ssh: bool = False
 
@@ -241,6 +243,60 @@ def read_modules() -> dict[str, int]:
                 out[parts[0]] = int(parts[2])
             except ValueError:
                 out[parts[0]] = 0
+    return out
+
+
+#: Every directory modprobe reads configuration from. /etc is the
+#: administrator's, /run is transient, and the last two belong to packages — the
+#: kernel package ships a long blacklist of its own there. This is why "nothing
+#: in /etc/modprobe.d" is not the same as "not blacklisted".
+MODPROBE_DIRS = (
+    "/etc/modprobe.d",
+    "/run/modprobe.d",
+    "/lib/modprobe.d",
+    "/usr/lib/modprobe.d",
+)
+
+
+def read_blacklists() -> dict[str, str]:
+    """``{module: the file that stops it loading}``, across every modprobe.d dir.
+
+    A blacklist line is the only evidence that a module will not load. Whether it
+    is loaded *right now* is a different question: a stock kernel ships about
+    6,900 modules and boots on about 130, so idle is the normal state for almost
+    all of them, and an idle module with no blacklist is one device, one mount or
+    one packet away from loading. That is the whole surface this section exists
+    to close, and reading "not loaded" as "blacklisted" claimed it was already
+    closed.
+
+    The file is kept so the UI can say *who* set it. Our own drop-in wins that
+    attribution, then /etc over the package directories — reporting Debian's
+    stock blacklist.conf as something this app or its user chose is what made a
+    fresh install read as already hardened.
+    """
+    out: dict[str, str] = {}
+    release = os.uname().release
+    for directory in MODPROBE_DIRS:
+        try:
+            # The kernel package names its blacklist after its own version and
+            # leaves the old ones behind, so several are usually present. modprobe
+            # reads them all regardless of the name — but a note that cites the
+            # file for a kernel you are not running reads like a bug, so the
+            # running one is named when it is there.
+            paths = sorted(
+                Path(directory).glob("*.conf"),
+                key=lambda p: (release not in p.name, p.name),
+            )
+        except OSError:
+            continue
+        for path in paths:
+            content = _read_text(path)
+            if content is None:
+                continue
+            ours = is_ours(content)
+            for name in _parse_modprobe(content):
+                if ours or name not in out:
+                    out[name] = str(path)
     return out
 
 
@@ -506,6 +562,7 @@ def gather(catalogue: Catalogue) -> SystemFacts:
         units=read_units(),
         gsettings=read_gsettings(gsettings_keys),
         vulnerabilities=read_vulnerabilities(),
+        blacklisted=read_blacklists(),
         over_ssh=bool(os.environ.get("SSH_CONNECTION")),
     )
 
@@ -570,11 +627,33 @@ def _parse_sudoers(content: str) -> dict[str, str]:
 
 
 def _parse_modprobe(content: str) -> set[str]:
+    """Modules a modprobe.d file stops from loading.
+
+    Two forms count, and we write both: ``blacklist`` stops the autoload path,
+    and ``install <mod> /bin/false`` stops an explicit modprobe as well. Either
+    one alone is still a module that will not load. Other ``install`` lines are
+    how alsa-base.conf sequences its own module loads — those are not a block and
+    are not read as one.
+
+    Names are normalised to underscores because modprobe treats the two spellings
+    as the same module: ``blacklist snd-aw2`` and ``blacklist snd_aw2`` are one
+    line to the kernel, and comparing them literally missed the half of a distro's
+    own blacklist that is written with hyphens.
+    """
     out: set[str] = set()
     for line in content.splitlines():
-        parts = line.split()
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        parts = stripped.split()
         if len(parts) >= 2 and parts[0] == "blacklist":
-            out.add(parts[1])
+            out.add(parts[1].replace("-", "_"))
+        elif (
+            len(parts) >= 3
+            and parts[0] == "install"
+            and parts[2] in ("/bin/false", "/bin/true")
+        ):
+            out.add(parts[1].replace("-", "_"))
     return out
 
 
@@ -666,8 +745,12 @@ def live_value(section: Section, flag: Flag, facts: SystemFacts) -> tuple[str | 
         return _cmdline_value(facts.cmdline, flag.key), "ok"
 
     if syntax == "modprobe":
-        # "Live" for a blacklist means: is the module currently loaded?
-        return ("0" if flag.key in facts.modules else "1"), "ok"
+        # Whether a file modprobe reads blacklists it — not whether it is loaded,
+        # which is a different question this used to answer the wrong way round.
+        # flag_state does not come through here for a blacklist (it needs the
+        # loaded flag and the file separately, so it calls _modprobe_state); this
+        # stays the per-syntax reader for anything else asking the same question.
+        return ("1" if flag.key in facts.blacklisted else "0"), "ok"
 
     if syntax == "services":
         state = facts.units.get(flag.key)
@@ -775,6 +858,49 @@ def _mitigation_contradiction(flag: Flag, facts: SystemFacts) -> str:
     return note
 
 
+def _modprobe_state(flag: Flag, facts: SystemFacts, on_disk: str | None) -> FlagState:
+    """State for a blacklist, which is a line's presence and not a value.
+
+    The generic path compares a live value against a reference. A blacklist has no
+    such value to read — the only thing the running kernel can tell us is whether
+    the module is loaded, and that answers a different question. Reading "not
+    loaded" as "blacklisted" made 159 of the 170 modules in this section report as
+    already blocked on a stock install, because idle is the normal state for
+    almost every module on the system and nothing was stopping any of them from
+    loading. The file is the state; loaded only decides whether a reboot is owed.
+    """
+    blacklisted_by = facts.blacklisted.get(flag.key)
+
+    if blacklisted_by is None:
+        # Not blacklisted anywhere, whether or not it happens to be loaded now.
+        return FlagState(flag.id, State.NOT_SET, live="0")
+
+    if flag.key in facts.modules:
+        return FlagState(
+            flag.id,
+            State.PENDING_REBOOT,
+            live="1",
+            on_disk=on_disk,
+            note=f"Blacklisted in {blacklisted_by}, but loaded right now (refcount "
+            f"{facts.modules.get(flag.key, 0)}). Needs a reboot.",
+        )
+
+    if on_disk is not None:
+        return FlagState(flag.id, State.APPLIED, live="1", on_disk=on_disk)
+
+    # In effect, but from a file this app did not write — usually one the distro
+    # ships. Saying which file is the difference between "you set this" and "your
+    # system came like this", and only the second one is true here.
+    return FlagState(
+        flag.id,
+        State.APPLIED,
+        live="1",
+        note=f"Already blacklisted by {blacklisted_by}, which this app did not "
+        "write — there is nothing to apply, and it cannot be switched off here. "
+        "Preset menu → “Capture this system” adopts it so this app can manage it.",
+    )
+
+
 def flag_state(
     section: Section,
     flag: Flag,
@@ -789,6 +915,10 @@ def flag_state(
     rather than *not set* — the state describes the machine, not our bookkeeping.
     """
     on_disk = on_disk_value(section, flag, facts)
+
+    if section.syntax_for(flag) == "modprobe":
+        return _modprobe_state(flag, facts, on_disk)
+
     live, status = live_value(section, flag, facts)
 
     if status == "absent":
@@ -838,15 +968,6 @@ def flag_state(
             live=live,
             on_disk=on_disk,
             note="Written to disk; takes effect on the next boot.",
-        )
-    if section.syntax_for(flag) == "modprobe":
-        return FlagState(
-            flag.id,
-            State.PENDING_REBOOT,
-            live=live,
-            on_disk=on_disk,
-            note="Blacklisted, but still loaded (refcount "
-            f"{facts.modules.get(flag.key, 0)}). Needs a reboot.",
         )
     return FlagState(
         flag.id,
@@ -902,6 +1023,39 @@ def slab_debug_redundancy(selection: dict[str, str]) -> str | None:
             "slab_nomerge adds nothing while it is on."
         )
     return None
+
+
+def core_pattern_clobbered_by_apport(
+    facts: SystemFacts, selection: dict[str, str]
+) -> str | None:
+    """core_pattern set while apport can still run = apport wins at the next boot.
+
+    apport rewrites the value itself — /usr/share/apport/apport ends with
+    ``write_to_proc_sys("kernel/core_pattern", "core")`` — and it starts about
+    fifteen seconds after systemd-sysctl has applied the drop-in. So the file is
+    right, the write succeeds, no error is logged anywhere, and the setting is gone
+    by the time anyone looks. The only trace is a drift badge, which says the
+    value disagrees without saying who took it.
+
+    Masking apport is what makes the setting hold; disabling it is enough too,
+    since a disabled unit is not started at boot.
+    """
+    if "core_pattern_false" not in selection:
+        return None
+    state = facts.units.get("apport.service")
+    if state is None:
+        return None  # not installed, nothing to overwrite it
+    if state in ("masked", "masked-runtime", "disabled"):
+        return None
+    if selection.get("svc_apport") in ("mask", "disable"):
+        return None  # being dealt with in this same transaction
+    return (
+        "apport is still enabled, and it overwrites kernel.core_pattern with "
+        "“core” when it starts — about fifteen seconds after the drop-in is "
+        "applied. This setting will read as applied and then silently stop being "
+        "in effect at the next boot. Mask apport in the services section, in this "
+        "same apply, to make it hold."
+    )
 
 
 def dot_without_firewall_port(selection: dict[str, str]) -> str | None:

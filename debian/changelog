@@ -1,3 +1,22 @@
+oss (1.1.0) unstable; urgency=medium
+
+  * Read a module blacklist from the files modprobe actually reads, instead of
+    treating "the module is not loaded" as "the module is blacklisted". A stock
+    kernel boots on about 130 of its ~6,900 modules, so on a fresh install 159
+    of the 170 flags in the modprobe section reported as already applied when
+    nothing was blacklisting them — and a flag that reads as in effect cannot be
+    switched on, so those modules could not be selected either.
+  * Say which file blacklists a module when it was not this app that wrote it,
+    so a distro's own blacklist.conf is no longer reported as the user's choice.
+  * Read /run, /lib and /usr/lib/modprobe.d as well as /etc/modprobe.d — the
+    kernel package ships a blacklist of its own in /lib.
+  * Treat hyphens and underscores in a module name as the same module, which is
+    how modprobe treats them; half of a distro blacklist is written with hyphens.
+  * Notice a blacklist added or removed in /etc/modprobe.d by hand, which
+    previously left the section unchanged on screen.
+
+ -- Jegly <jjjegly@gmail.com>  Mon, 17 Aug 2026 00:00:00 +0000
+
 oss (1.0.0) unstable; urgency=medium
 
   * Merge the grub section into /etc/default/grub instead of writing a

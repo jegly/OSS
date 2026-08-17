@@ -8,7 +8,7 @@
 #  tarball the Source0 below expects.
 
 Name:           oss
-Version:        1.0.0
+Version:        1.1.0
 Release:        1%{?dist}
 Summary:        Pick hardening flags, review the diff, apply once
 
@@ -79,7 +79,10 @@ application, and because a font is not something a system tool should force on
 you. Without this package OSS uses the system font.
 
 %prep
-%autosetup
+# -n because the tarball GitHub serves for a tag unpacks to the *repository*
+# name, OSS-1.1.0, not to %{name}-%{version}. Without this the build fails on
+# COPR and anywhere else that fetches Source0, while passing locally.
+%autosetup -n OSS-%{version}
 
 %build
 # Pure Python plus TOML data: nothing to compile.

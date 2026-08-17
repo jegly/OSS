@@ -12,7 +12,7 @@ order   = 30
 syntax  = "modprobe"
 target  = "/etc/modprobe.d/99-oss.conf"
 reload  = [["/usr/sbin/depmod", "-a"], ["/usr/sbin/update-initramfs", "-u"]]
-desc    = "Stop kernel modules loading at all. Already-loaded modules need a reboot."
+desc    = "Stop kernel modules loading at all. The curated families below are what presets carry; the browser above them reaches every module on this kernel. Already-loaded modules need a reboot."
 
 # ------------------------------------------------------------------------- #
 #  filesystems

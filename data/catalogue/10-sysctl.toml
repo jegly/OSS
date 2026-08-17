@@ -425,6 +425,10 @@ default = "1"
 title   = "Disable binfmt_misc"
 desc    = "No custom executable handlers"
 why     = "binfmt_misc registers arbitrary interpreters for arbitrary file magic"
+# This key takes 0 and 1 but reads back "enabled" / "disabled", so a successful
+# write never equals the value that was written and the section reported drift on
+# a setting that had applied perfectly. Nothing else in the catalogue does this.
+satisfied_by = ["disabled"]
 risk    = "breaking"
 breaks  = "Wine, qemu-user, some container runtimes"
 

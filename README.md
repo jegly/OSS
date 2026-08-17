@@ -34,10 +34,10 @@ Grab the package for your distribution from [Releases](https://github.com/jegly/
 
 | Distribution | Command |
 |---|---|
-| **Debian · Ubuntu · Mint · Pop!\_OS · elementary · Zorin** | `sudo apt install ./oss_1.0.0_all.deb` |
-| **Arch · Manjaro · EndeavourOS · CachyOS** | `sudo pacman -U oss-1.0.0-1-any.pkg.tar.*` |
-| **Fedora · Nobara · RHEL · Rocky · Alma** | `sudo dnf install oss-1.0.0-1.noarch.rpm oss-fonts-1.0.0-1.noarch.rpm` |
-| **openSUSE Tumbleweed · Leap** | `sudo zypper install oss-1.0.0-1.noarch.rpm oss-fonts-1.0.0-1.noarch.rpm` |
+| **Debian · Ubuntu · Mint · Pop!\_OS · elementary · Zorin** | `sudo apt install ./oss_1.1.0_all.deb` |
+| **Arch · Manjaro · EndeavourOS · CachyOS** | `sudo pacman -U oss-1.1.0-1-any.pkg.tar.*` |
+| **Fedora · Nobara · RHEL · Rocky · Alma** | `sudo dnf install oss-1.1.0-1.noarch.rpm oss-fonts-1.1.0-1.noarch.rpm` |
+| **openSUSE Tumbleweed · Leap** | `sudo zypper install oss-1.1.0-1.noarch.rpm oss-fonts-1.1.0-1.noarch.rpm` |
 
 The RPM ships the typefaces separately, so install both or the interface falls back to system fonts.
 
@@ -142,7 +142,7 @@ What's missing was never the mechanism. It's that almost nobody turns them on, b
 
 ## What's in it
 
-**27 sections, 689 settings.** All of it lives in TOML data files under `data/catalogue/`, so adding a setting means editing data, not code.
+**26 sections, 689 settings.** All of it lives in TOML data files under `data/catalogue/`, so adding a setting means editing data, not code.
 
 | Group | Sections |
 |---|---|

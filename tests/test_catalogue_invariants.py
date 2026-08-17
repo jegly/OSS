@@ -159,7 +159,7 @@ class TestSections(unittest.TestCase):
         dedicated = {
             "ufw", "packages", "snap", "apparmor", "accounts", "integrity",
             "services", "systemd", "bootloader", "permissions", "fstab", "usb",
-            "tpm", "debloat",
+            "tpm",
         }
         orphans = [
             s.id for s in CATALOGUE.sections if not s.flags and s.id not in dedicated

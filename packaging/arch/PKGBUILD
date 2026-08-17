@@ -12,7 +12,7 @@
 # so every package installs the helper to the same place.
 
 pkgname=oss
-pkgver=1.0.0
+pkgver=1.1.0
 pkgrel=1
 pkgdesc="Pick hardening flags, review the diff, apply once — a GTK4 control centre for Linux hardening"
 arch=('any')
@@ -38,14 +38,22 @@ source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 
 check() {
-  cd "$srcdir/$pkgname-$pkgver"
+  # OSS-, not $pkgname-: the tarball GitHub serves for a tag unpacks to the
+  # repository name, which is capitalised, while the archive itself is named
+  # after the package. Using $pkgname here built fine from a locally-made
+  # tarball and failed for anyone building from the AUR.
+  cd "$srcdir/OSS-$pkgver"
   # Skips the GTK tests automatically when there is no display, which is the
   # normal case in a clean chroot. See tests/test_cards.py.
   python3 -m unittest discover -s tests
 }
 
 package() {
-  cd "$srcdir/$pkgname-$pkgver"
+  # OSS-, not $pkgname-: the tarball GitHub serves for a tag unpacks to the
+  # repository name, which is capitalised, while the archive itself is named
+  # after the package. Using $pkgname here built fine from a locally-made
+  # tarball and failed for anyone building from the AUR.
+  cd "$srcdir/OSS-$pkgver"
 
   install -d "$pkgdir/usr/share/oss"
   cp -r src/ossgui "$pkgdir/usr/share/oss/"
