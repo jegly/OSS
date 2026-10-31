@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # The only thing to update: the GitHub Actions the workflows use. The app's
+  # runtime dependencies are Ubuntu packages (Depends: in the .deb), which
+  # Dependabot cannot track.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]
