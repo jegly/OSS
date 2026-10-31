@@ -41,6 +41,20 @@ Grab the package for your distribution from [Releases](https://github.com/jegly/
 
 The RPM ships the typefaces separately, so install both or the interface falls back to system fonts.
 
+### Checksums
+
+<!-- release-checksums:start -->
+| File | SHA-256 |
+|---|---|
+| `oss_1.1.0_all.deb` | *sha256:5a5380dc0cc48cf646c6456c3d71b5b055e8dfe1101e4c94d17cac00a29d394d* |
+
+Verify a download:
+
+```bash
+sha256sum oss_1.1.0_all.deb
+```
+<!-- release-checksums:end -->
+
 Or let it work out which one your system wants, build it, and install it:
 
 ```bash

@@ -1,0 +1,50 @@
+# Builds the .deb on every push to main and every PR, including Dependabot's:
+# unit tests, the package, then tools/packaging-gate.sh on it.
+# Nothing is published from here; see release.yml.
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Test, build and gate .deb
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # Runtime dependencies too: the packaging gate checks they are installed
+      # and loads the catalogue from the built tree.
+      - name: Install build tools and runtime dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            dpkg-dev python3 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 polkitd fontconfig
+
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests
+
+      - name: Build .deb
+        id: deb
+        run: echo "path=$(./tools/build-deb.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Packaging gate
+        run: ./tools/packaging-gate.sh "${{ steps.deb.outputs.path }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: deb
+          path: build/oss_*_all.deb
+          if-no-files-found: error
+          retention-days: 14
