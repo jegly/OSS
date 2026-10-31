@@ -114,11 +114,24 @@ extra   = [
   "-a always,exit -F arch=b32 -S sethostname,setdomainname -k system-locale",
   "-w /etc/hosts -p wa -k system-locale",
   "-w /etc/hostname -p wa -k system-locale",
-  "-w /etc/NetworkManager/ -p wa -k system-locale",
 ]
 title   = "Network environment"
 desc    = "Hostname and hosts-file changes"
 why     = "A rewritten /etc/hosts redirects updates and telemetry silently"
+risk    = "safe"
+
+[[flag]]
+#  Split out of audit_network_env: NetworkManager is absent on servers and
+#  minimal installs, and one missing watch fails every rule in the file.
+id      = "audit_networkmanager"
+group   = "auditd / watches"
+key     = "-w /etc/NetworkManager/ -p wa -k system-locale"
+value   = "1"
+default = "0"
+title   = "NetworkManager configuration"
+desc    = "Writes to /etc/NetworkManager"
+why     = "Connection profiles set DNS, proxies and VPNs; a changed profile reroutes traffic without touching /etc/hosts"
+needs   = ["path:/etc/NetworkManager"]
 risk    = "safe"
 
 [[flag]]
@@ -276,7 +289,6 @@ value   = "1"
 default = "0"
 extra   = [
   "-w /usr/bin/su -p x -k privileged",
-  "-w /usr/bin/pkexec -p x -k privileged",
   "-w /usr/bin/passwd -p x -k privileged",
   "-w /usr/sbin/usermod -p x -k privileged",
   "-w /usr/sbin/useradd -p x -k privileged",
@@ -285,8 +297,22 @@ extra   = [
   "-w /usr/bin/crontab -p x -k privileged",
 ]
 title   = "Privileged command use"
-desc    = "sudo, su, pkexec, passwd, useradd"
+desc    = "sudo, su, passwd, useradd"
 why     = "Covers every normal route to elevated privilege"
+risk    = "safe"
+
+[[flag]]
+#  Split out of audit_privileged_cmds: pkexec is its own package, separate from
+#  polkit, and not always installed. One missing watch fails every rule in the file.
+id      = "audit_pkexec"
+group   = "auditd / watches"
+key     = "-w /usr/bin/pkexec -p x -k privileged"
+value   = "1"
+default = "0"
+title   = "pkexec use"
+desc    = "Runs of /usr/bin/pkexec"
+why     = "pkexec is polkit's route to root, used by graphical admin tools"
+needs   = ["path:/usr/bin/pkexec"]
 risk    = "safe"
 
 # --------------------------------------------------------------------------- #
