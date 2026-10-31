@@ -190,6 +190,10 @@ id = "audit_network_env"
 value = "1"
 
 [[set]]
+id = "audit_networkmanager"
+value = "1"
+
+[[set]]
 id = "audit_pam_config"
 value = "1"
 
@@ -203,6 +207,10 @@ value = "1"
 
 [[set]]
 id = "audit_perm_mod"
+value = "1"
+
+[[set]]
+id = "audit_pkexec"
 value = "1"
 
 [[set]]
