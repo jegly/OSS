@@ -1,3 +1,9 @@
+oss (1.1.1) unstable; urgency=medium
+
+  * Release 1.1.1. Changes: https://github.com/jegly/OSS/releases/tag/v1.1.1
+
+ -- Jegly <jjjegly@gmail.com>  Sat, 31 Oct 2026 10:19:48 +0000
+
 oss (1.1.0) unstable; urgency=medium
 
   * Read a module blacklist from the files modprobe actually reads, instead of

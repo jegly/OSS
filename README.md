@@ -34,7 +34,7 @@ Grab the package for your distribution from [Releases](https://github.com/jegly/
 
 | Distribution | Command |
 |---|---|
-| **Debian · Ubuntu · Mint · Pop!\_OS · elementary · Zorin** | `sudo apt install ./oss_1.1.0_all.deb` |
+| **Debian · Ubuntu · Mint · Pop!\_OS · elementary · Zorin** | `sudo apt install ./oss_1.1.1_all.deb` |
 | **Arch · Manjaro · EndeavourOS · CachyOS** | `sudo pacman -U oss-1.1.0-1-any.pkg.tar.*` |
 | **Fedora · Nobara · RHEL · Rocky · Alma** | `sudo dnf install oss-1.1.0-1.noarch.rpm oss-fonts-1.1.0-1.noarch.rpm` |
 | **openSUSE Tumbleweed · Leap** | `sudo zypper install oss-1.1.0-1.noarch.rpm oss-fonts-1.1.0-1.noarch.rpm` |
@@ -46,13 +46,15 @@ The RPM ships the typefaces separately, so install both or the interface falls b
 <!-- release-checksums:start -->
 | File | SHA-256 |
 |---|---|
-| `oss_1.1.0_all.deb` | *sha256:5a5380dc0cc48cf646c6456c3d71b5b055e8dfe1101e4c94d17cac00a29d394d* |
+| `oss_1.1.1_all.deb` | *sha256:0b25d48f40a1017577807cab050e47f3f9c7580714ddd179a0d874c57f1a9da4* |
 
 Verify a download:
 
 ```bash
-sha256sum oss_1.1.0_all.deb
+sha256sum oss_1.1.1_all.deb
 ```
+
+The [build attestation](https://github.com/jegly/OSS/attestations) shows it was built by this repository's release workflow (with the GitHub CLI: `gh attestation verify oss_1.1.1_all.deb --repo jegly/OSS`).
 <!-- release-checksums:end -->
 
 Or let it work out which one your system wants, build it, and install it:
